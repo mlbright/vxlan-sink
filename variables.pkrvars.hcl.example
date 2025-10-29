@@ -1,0 +1,22 @@
+# Packer Variables File
+# Copy this to variables.auto.pkrvars.hcl and customize as needed
+
+# AWS Region where the AMI will be built
+aws_region = "us-east-1"
+
+# Instance type for building the AMI
+# Options for Graviton (cheapest to most expensive):
+# - t4g.nano (2 vCPU, 0.5 GB RAM) - CHEAPEST
+# - t4g.micro (2 vCPU, 1 GB RAM)
+# - t4g.small (2 vCPU, 2 GB RAM)
+# - t4g.medium (2 vCPU, 4 GB RAM)
+instance_type = "t4g.nano"
+
+# Prefix for the AMI name (timestamp will be appended)
+ami_name_prefix = "vxlan-graviton"
+
+# SSH username for Ubuntu
+ssh_username = "ubuntu"
+
+# Root volume size in GB
+volume_size = 8

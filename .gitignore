@@ -1,0 +1,41 @@
+# Packer
+packer_cache/
+crash.log
+manifest.json
+packer-manifest.json
+*.box
+
+# Packer variables with sensitive data
+variables.auto.pkrvars.hcl
+secrets.pkrvars.hcl
+*.auto.pkrvars.hcl
+
+# AWS credentials
+.aws/
+*.pem
+*.key
+
+# Terraform (if used alongside)
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# Editor files
+.vscode/
+.idea/
+*.sublime-*
+
+# Backup files
+*.bak
+*.backup

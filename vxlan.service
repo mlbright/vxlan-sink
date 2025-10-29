@@ -1,0 +1,32 @@
+[Unit]
+Description=VXLAN Interface Configuration
+Documentation=man:ip-link(8)
+After=network-online.target
+Wants=network-online.target
+Before=docker.service containerd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/vxlan-setup.sh
+ExecStop=/usr/local/bin/vxlan-teardown.sh
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/sys/class/net /run
+NoNewPrivileges=yes
+
+# Network namespace capabilities required for VXLAN
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+
+# Restart policy
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target
