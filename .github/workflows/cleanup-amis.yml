@@ -1,0 +1,188 @@
+name: Cleanup Old AMIs
+
+on:
+  schedule:
+    # Run monthly on the 1st at 00:00 UTC
+    - cron: '0 0 1 * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (don\'t actually delete)'
+        required: false
+        type: boolean
+        default: true
+      keep_count:
+        description: 'Number of recent AMIs to keep per region'
+        required: false
+        type: number
+        default: 5
+      regions:
+        description: 'Comma-separated list of regions to clean'
+        required: false
+        default: 'us-east-1,us-west-2,eu-west-1'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  cleanup-amis:
+    name: Cleanup AMIs in ${{ matrix.region }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        region:
+          - us-east-1
+          - us-west-2
+          - eu-west-1
+      fail-fast: false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ matrix.region }}
+          role-session-name: GitHubActions-AMICleanup-${{ github.run_id }}
+
+      - name: Verify AWS credentials
+        run: |
+          aws sts get-caller-identity
+          echo "Cleaning up region: ${{ matrix.region }}"
+
+      - name: List AMIs to potentially delete
+        id: list_amis
+        env:
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'true' }}
+          KEEP_COUNT: ${{ github.event.inputs.keep_count || '5' }}
+        run: |
+          echo "Finding AMIs created by this repository..."
+          
+          # Get all AMIs owned by us, sorted by creation date
+          AMIS=$(aws ec2 describe-images \
+            --owners self \
+            --filters "Name=name,Values=vxlan-graviton-*" \
+            --query 'Images | sort_by(@, &CreationDate) | reverse(@) | [].[ImageId, Name, CreationDate, Tags[?Key==`Version`].Value | [0]]' \
+            --output json)
+          
+          TOTAL_COUNT=$(echo "$AMIS" | jq 'length')
+          echo "Found $TOTAL_COUNT AMIs in ${{ matrix.region }}"
+          
+          if [ "$TOTAL_COUNT" -le "$KEEP_COUNT" ]; then
+            echo "✓ Only $TOTAL_COUNT AMIs found, keeping all (threshold: $KEEP_COUNT)"
+            echo "amis_to_delete=[]" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Get AMIs to delete (all except the most recent KEEP_COUNT)
+          AMIS_TO_DELETE=$(echo "$AMIS" | jq -r ".[$KEEP_COUNT:] | .[].ImageId")
+          AMIS_TO_DELETE_JSON=$(echo "$AMIS_TO_DELETE" | jq -R -s -c 'split("\n") | map(select(. != ""))')
+          
+          echo "amis_to_delete=$AMIS_TO_DELETE_JSON" >> $GITHUB_OUTPUT
+          
+          DELETE_COUNT=$(echo "$AMIS_TO_DELETE_JSON" | jq 'length')
+          
+          echo ""
+          echo "Summary for ${{ matrix.region }}:"
+          echo "  Total AMIs: $TOTAL_COUNT"
+          echo "  Keep: $KEEP_COUNT (most recent)"
+          echo "  Delete: $DELETE_COUNT"
+          echo ""
+          
+          if [ "$DRY_RUN" == "true" ]; then
+            echo "🔍 DRY RUN - Would delete the following AMIs:"
+          else
+            echo "🗑️  Will delete the following AMIs:"
+          fi
+          
+          echo "$AMIS" | jq -r ".[$KEEP_COUNT:] | .[] | \"  - \(.[0]) - \(.[1]) (Created: \(.[2]))\"" || true
+
+      - name: Delete old AMIs
+        if: steps.list_amis.outputs.amis_to_delete != '[]'
+        env:
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'true' }}
+          AMIS_TO_DELETE: ${{ steps.list_amis.outputs.amis_to_delete }}
+        run: |
+          if [ "$DRY_RUN" == "true" ]; then
+            echo "🔍 DRY RUN MODE - Not actually deleting AMIs"
+            echo "$AMIS_TO_DELETE" | jq -r '.[] | "Would delete: \(.)"'
+            exit 0
+          fi
+          
+          echo "🗑️  Deleting old AMIs..."
+          
+          for AMI_ID in $(echo "$AMIS_TO_DELETE" | jq -r '.[]'); do
+            echo "Deleting AMI: $AMI_ID"
+            
+            # Get associated snapshots before deregistering
+            SNAPSHOTS=$(aws ec2 describe-images \
+              --image-ids "$AMI_ID" \
+              --query 'Images[0].BlockDeviceMappings[*].Ebs.SnapshotId' \
+              --output text)
+            
+            # Deregister AMI
+            aws ec2 deregister-image --image-id "$AMI_ID"
+            echo "  ✓ Deregistered $AMI_ID"
+            
+            # Delete associated snapshots
+            for SNAPSHOT_ID in $SNAPSHOTS; do
+              if [ ! -z "$SNAPSHOT_ID" ] && [ "$SNAPSHOT_ID" != "None" ]; then
+                echo "  Deleting snapshot: $SNAPSHOT_ID"
+                aws ec2 delete-snapshot --snapshot-id "$SNAPSHOT_ID" || echo "  ⚠️  Failed to delete snapshot $SNAPSHOT_ID"
+              fi
+            done
+          done
+          
+          echo "✓ Cleanup complete for ${{ matrix.region }}"
+
+      - name: Generate summary
+        run: |
+          echo "### AMI Cleanup Summary - ${{ matrix.region }} 🧹" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          DRY_RUN="${{ github.event.inputs.dry_run || 'true' }}"
+          AMIS_TO_DELETE='${{ steps.list_amis.outputs.amis_to_delete }}'
+          DELETE_COUNT=$(echo "$AMIS_TO_DELETE" | jq 'length')
+          
+          if [ "$DRY_RUN" == "true" ]; then
+            echo "**Mode:** 🔍 Dry Run (no changes made)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Mode:** 🗑️ Active Deletion" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "**Keep Count:** ${{ github.event.inputs.keep_count || '5' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**AMIs Processed:** $DELETE_COUNT" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$DELETE_COUNT" -eq 0 ]; then
+            echo "✅ No AMIs needed to be deleted" >> $GITHUB_STEP_SUMMARY
+          elif [ "$DRY_RUN" == "true" ]; then
+            echo "📋 Would delete $DELETE_COUNT AMI(s)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ Deleted $DELETE_COUNT AMI(s)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  summary:
+    name: Cleanup Summary
+    runs-on: ubuntu-latest
+    needs: cleanup-amis
+    if: always()
+    
+    steps:
+      - name: Create overall summary
+        run: |
+          echo "## AMI Cleanup Job Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_STEP_SUMMARY
+          echo "**Dry Run:** ${{ github.event.inputs.dry_run || 'true' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Keep Count:** ${{ github.event.inputs.keep_count || '5' }} most recent AMIs per region" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check individual region jobs above for details." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 💡 Tip" >> $GITHUB_STEP_SUMMARY
+          echo "To perform actual deletion, run this workflow manually with:" >> $GITHUB_STEP_SUMMARY
+          echo '- **Dry run:** `false`' >> $GITHUB_STEP_SUMMARY
+          echo '- **Keep count:** Desired number (default: 5)' >> $GITHUB_STEP_SUMMARY

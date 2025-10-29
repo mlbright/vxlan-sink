@@ -1,349 +1,497 @@
-# VXLAN Interface with Systemd & AWS Graviton AMI Builder
+# GitHub Actions AMI Publishing Workflow
 
-This repository contains scripts to configure a VXLAN interface on Linux with systemd integration, and a Packer configuration to build AWS AMIs on Graviton (ARM64) instances.
+Automated workflow to build and publish Graviton VXLAN AMIs using GitHub Actions with AWS OIDC authentication.
 
-## Contents
+## Features
 
-### VXLAN Scripts
+✅ **OIDC Authentication** - No long-lived AWS credentials  
+✅ **Multi-Region** - Build AMIs in US East, US West, and EU West simultaneously  
+✅ **Automatic Publishing** - Make AMIs public on tagged releases  
+✅ **Validation** - Packer validation on all PRs  
+✅ **GitHub Releases** - Automatic release creation with AMI IDs  
+✅ **Artifacts** - Packer manifests saved for 90 days  
+✅ **Parallel Builds** - Regional builds run concurrently  
 
-1. **vxlan-setup.sh** - Bash script that configures a VXLAN interface
-   - Creates a VXLAN interface (vxlan0) on port 4789
-   - Sets up a bridge interface (br-vxlan)
-   - Configures firewall rules to accept traffic from any source
-   - Supports both nftables and iptables
+## Workflow Triggers
 
-2. **vxlan-teardown.sh** - Cleanup script to remove VXLAN configuration
-   - Removes VXLAN and bridge interfaces
-   - Cleans up firewall rules
+### Automatic Triggers
 
-3. **vxlan.service** - Systemd service unit file
-   - Ensures VXLAN interface comes up at boot
-   - Includes security hardening
-   - Proper dependency management
+| Trigger | When | What Happens |
+|---------|------|--------------|
+| **Push to `main`** | Code merged to main | Builds dev AMIs (not public) |
+| **Push tag `v*`** | Release tag created | Builds AMIs in all regions, makes them public, creates GitHub release |
+| **Pull Request** | PR opened/updated | Validates Packer config only (no build) |
 
-4. **install-vxlan-service.sh** - Installation helper script
-   - Installs all components to appropriate system locations
-   - Enables the systemd service
+### Manual Trigger
 
-### Packer Configuration
+You can also trigger builds manually:
 
-1. **graviton-vxlan-ami.pkr.hcl** - Main Packer HCL2 configuration
-   - Builds an AWS AMI using Graviton (ARM64) instances
-   - Uses t4g.nano (cheapest Graviton instance type)
-   - Pre-installs and configures VXLAN setup
-   - Based on Ubuntu 22.04 ARM64
+1. Go to **Actions** → **Build and Publish Graviton VXLAN AMI**
+2. Click **Run workflow**
+3. Select branch
+4. Optionally customize:
+   - **Regions**: Comma-separated list (e.g., `us-east-1,ap-south-1`)
+   - **Make Public**: Check to make AMI public
 
-2. **variables.pkrvars.hcl.example** - Example variables file
-   - Customizable configuration options
+## Workflow Structure
 
-## Prerequisites
-
-### For VXLAN Setup
-- Linux system with systemd
-- Root access
-- `iproute2` package installed
-- Either `nftables` or `iptables` for firewall configuration
-
-### For Packer
-- [Packer](https://www.packer.io/) >= 1.9.0
-- AWS credentials configured (`~/.aws/credentials` or environment variables)
-- AWS account with permissions to create AMIs
-
-## VXLAN Configuration Details
-
-### Default Settings
-- **VXLAN Interface**: vxlan0
-- **VXLAN ID**: 100
-- **VXLAN Port**: 4789 (UDP)
-- **Bridge Interface**: br-vxlan
-- **Bridge IP**: 10.200.0.1/24
-- **Physical Interface**: eth0 (modify in script if needed)
-
-### Customization
-Edit the variables at the top of `vxlan-setup.sh`:
-
-```bash
-VXLAN_INTERFACE="vxlan0"
-VXLAN_ID="100"
-VXLAN_PORT="4789"
-VXLAN_DEV="eth0"  # Change to your interface name
-BRIDGE_IP="10.200.0.1/24"  # Change to your desired network
+```
+.github/workflows/build-ami.yml
+├── validate       - Validate Packer config (runs on PRs)
+├── build-ami      - Build AMI in matrix of regions
+│   ├── us-east-1
+│   ├── us-west-2
+│   └── eu-west-1
+├── create-release - Create GitHub release (only on tags)
+└── notify-failure - Send notification on failure
 ```
 
-## Installation & Usage
+## Setup Prerequisites
 
-### Manual VXLAN Setup
+Before the workflow can run, you must:
 
-1. **Edit configuration** (if needed):
-   ```bash
-   vim vxlan-setup.sh
-   # Modify VXLAN_DEV to match your network interface
-   # Modify BRIDGE_IP to match your desired network
-   ```
+1. ✅ **Setup AWS OIDC** (see [terraform/README.md](../terraform/README.md))
+2. ✅ **Add GitHub Secret**: `AWS_ROLE_ARN` with the IAM role ARN
+3. ✅ **Commit files** to your repository
 
-2. **Make scripts executable**:
-   ```bash
-   chmod +x vxlan-setup.sh vxlan-teardown.sh install-vxlan-service.sh
-   ```
+## Usage Examples
 
-3. **Install systemd service**:
-   ```bash
-   sudo ./install-vxlan-service.sh
-   ```
-
-4. **Start the service**:
-   ```bash
-   sudo systemctl start vxlan.service
-   ```
-
-5. **Check status**:
-   ```bash
-   sudo systemctl status vxlan.service
-   ```
-
-6. **View logs**:
-   ```bash
-   sudo journalctl -u vxlan.service -f
-   ```
-
-### Adding Remote VXLAN Endpoints
-
-After the VXLAN interface is up, add remote endpoints:
+### Release a New AMI Version
 
 ```bash
-# Add a remote VXLAN endpoint
-sudo bridge fdb append 00:00:00:00:00:00 dev vxlan0 dst <REMOTE_IP>
-
-# Example:
-sudo bridge fdb append 00:00:00:00:00:00 dev vxlan0 dst 192.168.1.100
+# Create a release tag
+git tag -a v1.0.0 -m "Release v1.0.0 - Initial public release"
+git push origin v1.0.0
 ```
 
-### Manual Testing (Without Systemd)
+This will:
+1. ✅ Build AMI in 3 regions
+2. ✅ Make AMIs public
+3. ✅ Create GitHub release with AMI IDs
+4. ✅ Tag AMIs with version info
+
+### Build Development AMI
 
 ```bash
-# Run setup script directly
-sudo ./vxlan-setup.sh
-
-# Verify configuration
-ip -d link show vxlan0
-ip addr show br-vxlan
-
-# Test with tcpdump
-sudo tcpdump -i vxlan0 -n
-
-# Clean up
-sudo ./vxlan-teardown.sh
+# Just push to main
+git push origin main
 ```
 
-## Building AWS Graviton AMI with Packer
+This will:
+1. ✅ Build AMI in 3 regions
+2. ❌ AMIs remain private (not public)
+3. ❌ No GitHub release created
 
-### Setup
-
-1. **Configure AWS credentials**:
-   ```bash
-   export AWS_ACCESS_KEY_ID="your-access-key"
-   export AWS_SECRET_ACCESS_KEY="your-secret-key"
-   export AWS_DEFAULT_REGION="us-east-1"
-   ```
-
-   Or configure via `~/.aws/credentials`
-
-2. **Customize variables** (optional):
-   ```bash
-   cp variables.pkrvars.hcl.example variables.auto.pkrvars.hcl
-   vim variables.auto.pkrvars.hcl
-   ```
-
-### Build AMI
-
-1. **Initialize Packer**:
-   ```bash
-   packer init graviton-vxlan-ami.pkr.hcl
-   ```
-
-2. **Validate configuration**:
-   ```bash
-   packer validate graviton-vxlan-ami.pkr.hcl
-   ```
-
-3. **Build AMI**:
-   ```bash
-   packer build graviton-vxlan-ami.pkr.hcl
-   ```
-
-   With custom variables:
-   ```bash
-   packer build -var-file=variables.auto.pkrvars.hcl graviton-vxlan-ami.pkr.hcl
-   ```
-
-4. **Check output**:
-   - AMI ID will be displayed at the end of the build
-   - Check `manifest.json` for build details
-
-### Using Different Graviton Instance Types
-
-The default is `t4g.nano` (cheapest), but you can use:
+### Test Without Building
 
 ```bash
-# Via command line
-packer build -var="instance_type=t4g.micro" graviton-vxlan-ami.pkr.hcl
-
-# Or edit variables file
-instance_type = "t4g.small"
+# Create a pull request
+git checkout -b feature/my-changes
+git push origin feature/my-changes
+# Open PR on GitHub
 ```
 
-**Graviton Instance Options** (ARM64):
-- `t4g.nano` - 2 vCPU, 0.5 GB RAM (cheapest)
-- `t4g.micro` - 2 vCPU, 1 GB RAM
-- `t4g.small` - 2 vCPU, 2 GB RAM
-- `t4g.medium` - 2 vCPU, 4 GB RAM
-- `t4g.large` - 2 vCPU, 8 GB RAM
-- `c7g.medium` - Compute optimized
-- `m7g.medium` - General purpose
-- `r7g.medium` - Memory optimized
+This will:
+1. ✅ Validate Packer configuration
+2. ✅ Format check
+3. ❌ No AMI build (saves costs)
 
-## Firewall Configuration
+### Manual Build
 
-The setup script automatically configures firewall rules to accept VXLAN traffic on UDP port 4789.
+1. Go to **Actions** tab
+2. Select **Build and Publish Graviton VXLAN AMI**
+3. Click **Run workflow**
+4. Configure:
+   - Branch: `main`
+   - Regions: `us-east-1,eu-central-1` (or leave default)
+   - Make Public: ✓ (optional)
+5. Click **Run workflow**
 
-### nftables (preferred)
+## Workflow Jobs Explained
+
+### Job: `validate`
+
+**Runs on**: All pushes and PRs
+
+```yaml
+Steps:
+1. Checkout code
+2. Setup Packer
+3. Initialize Packer plugins
+4. Validate configuration
+5. Check formatting
+```
+
+**Purpose**: Catch configuration errors early without incurring AMI build costs.
+
+### Job: `build-ami`
+
+**Runs on**: Pushes to main/release branches, tags, manual dispatch
+
+**Matrix Strategy**: Builds in parallel across regions
+- `us-east-1` - US East (N. Virginia)
+- `us-west-2` - US West (Oregon)  
+- `eu-west-1` - EU (Ireland)
+
+```yaml
+Steps:
+1. Checkout code
+2. Setup Packer
+3. Assume AWS role via OIDC
+4. Verify AWS credentials
+5. Build AMI with Packer
+6. Tag AMI with metadata
+7. Make AMI public (if tag/manual)
+8. Upload manifest artifact
+9. Generate summary
+```
+
+**Output**: AMI ID per region, saved in artifacts
+
+### Job: `create-release`
+
+**Runs on**: Tag pushes (`v*`) only
+
+```yaml
+Steps:
+1. Download all manifests
+2. Generate release notes with AMI IDs
+3. Create GitHub release
+4. Attach manifest files
+```
+
+**Output**: GitHub release with:
+- AMI IDs for all regions
+- Launch instructions
+- Feature list
+- Manifest JSON files
+
+## GitHub Release Format
+
+When you push a tag, the workflow creates a release like this:
+
+```markdown
+# Graviton VXLAN AMI Release v1.0.0
+
+## AMI IDs by Region
+
+- **us-east-1**: `ami-0123456789abcdef0`
+- **us-west-2**: `ami-0fedcba9876543210`
+- **eu-west-1**: `ami-0a1b2c3d4e5f67890`
+
+## Launch Instance
+
 ```bash
-# View rules
-sudo nft list table inet vxlan
-
-# Manually add rule
-sudo nft add table inet vxlan
-sudo nft add chain inet vxlan input { type filter hook input priority 0 \; }
-sudo nft add rule inet vxlan input udp dport 4789 accept
+aws ec2 run-instances \
+  --image-id <AMI_ID_FROM_ABOVE> \
+  --instance-type t4g.nano \
+  --key-name YOUR_KEY_PAIR \
+  --security-group-ids YOUR_SECURITY_GROUP \
+  --subnet-id YOUR_SUBNET
 ```
 
-### iptables (fallback)
-```bash
-# View rules
-sudo iptables -L -n | grep 4789
-
-# Manually add rule
-sudo iptables -A INPUT -p udp --dport 4789 -j ACCEPT
-sudo iptables-save > /etc/iptables/rules.v4
+## Features
+- VXLAN interface pre-configured (vxlan0)
+- Systemd service for automatic startup
+- UDP port 4789 configured for VXLAN traffic
+...
 ```
 
-## Security Considerations
+## Customizing Regions
 
-1. **VXLAN accepts traffic from ANY source** - This is by design but consider:
-   - Using AWS Security Groups to restrict source IPs
-   - Implementing additional network ACLs
-   - Using IPsec or WireGuard for VXLAN tunnel encryption
+### Change Default Regions
 
-2. **Systemd Security Hardening** - The service includes:
-   - Capability restrictions (only NET_ADMIN and NET_RAW)
-   - Private temp directories
-   - Protected system directories
-   - No new privileges
+Edit `.github/workflows/build-ami.yml`:
 
-3. **AWS Security Groups** - When using the AMI, configure security groups:
-   ```bash
-   # Allow VXLAN from specific CIDR
-   aws ec2 authorize-security-group-ingress \
-     --group-id sg-xxxxx \
-     --protocol udp \
-     --port 4789 \
-     --cidr 10.0.0.0/8
-   ```
+```yaml
+strategy:
+  matrix:
+    region: 
+      - us-east-1
+      - ap-south-1      # Add Mumbai
+      - eu-central-1    # Add Frankfurt
+```
+
+### Build in Single Region
+
+For testing/cost savings, temporarily edit to single region:
+
+```yaml
+strategy:
+  matrix:
+    region: 
+      - us-east-1  # Only build here
+```
+
+Or use **workflow_dispatch** to specify regions manually.
+
+## AMI Naming Convention
+
+AMIs are named using this pattern:
+
+```
+Format: vxlan-graviton-{VERSION}
+
+Examples:
+- Tagged release: vxlan-graviton-v1.0.0
+- Dev build:      vxlan-graviton-dev-20251029-a1b2c3d
+```
+
+Where:
+- `VERSION` = Git tag (e.g., `v1.0.0`)
+- `dev-YYYYMMDD-SHA` = Date + short commit SHA for non-tag builds
+
+## AMI Tags
+
+Each AMI is tagged with metadata:
+
+```yaml
+GitHubRepository: "your-org/your-repo"
+GitHubRef:        "refs/tags/v1.0.0"
+GitHubSHA:        "a1b2c3d4e5f..."
+GitHubRunId:      "1234567890"
+BuildDate:        "2025-10-29T15:30:00Z"
+Version:          "v1.0.0"
+```
+
+Use these tags to track AMI provenance.
+
+## Making AMIs Public
+
+AMIs are made public automatically when:
+
+1. ✅ **Tagged release** - Any tag starting with `v` (e.g., `v1.0.0`)
+2. ✅ **Manual dispatch** - When "Make Public" is checked
+
+AMIs remain **private** for:
+- ❌ Pushes to main/branches (dev builds)
+- ❌ Pull requests
+
+### Security Note
+
+⚠️ **Making AMIs public means anyone can launch instances from them.**
+
+Ensure:
+- No sensitive data in the AMI
+- Properly configured security groups on launch
+- User data or initialization handles security
+
+## Monitoring Workflow
+
+### View Running Workflows
+
+1. Go to **Actions** tab
+2. Click on the workflow run
+3. View job progress in real-time
+
+### Check AMI Build Progress
+
+Each job outputs a summary:
+
+```
+### AMI Build Complete 🚀
+
+**Region:** us-east-1
+**AMI ID:** `ami-0123456789abcdef0`
+**Version:** v1.0.0
+**Public:** true
+
+#### Launch Command
+aws ec2 run-instances \
+  --region us-east-1 \
+  --image-id ami-0123456789abcdef0 \
+  --instance-type t4g.nano \
+  --key-name YOUR_KEY \
+  --security-group-ids YOUR_SG
+```
+
+### Download Manifests
+
+Packer manifests are saved as artifacts for 90 days:
+
+1. Go to workflow run
+2. Scroll to **Artifacts**
+3. Download `ami-manifest-{region}`
+4. Contains complete build metadata
 
 ## Troubleshooting
 
-### VXLAN Interface Issues
+### Error: "could not retrieve caller identity"
 
+**Cause**: AWS OIDC not set up correctly
+
+**Fix**:
+1. Verify `AWS_ROLE_ARN` secret exists
+2. Check role trust policy allows your repo
+3. See [terraform/README.md](../terraform/README.md)
+
+### Error: "UnauthorizedOperation: You are not authorized"
+
+**Cause**: IAM role lacks permissions
+
+**Fix**:
 ```bash
-# Check if interface exists
-ip link show vxlan0
-
-# Check systemd service status
-sudo systemctl status vxlan.service
-
-# View detailed logs
-sudo journalctl -u vxlan.service -n 50
-
-# Check physical interface
-ip addr show eth0
-
-# Verify kernel modules
-lsmod | grep vxlan
+cd terraform/
+terraform apply  # Reapply to update permissions
 ```
 
-### Firewall Issues
+### Error: "AMI already exists"
 
+**Cause**: You're rebuilding with same tag/version
+
+**Fix**:
+- Delete old AMI, or
+- Use a new version tag
+
+### Build Succeeds but AMI Not Public
+
+**Check**:
+1. Was it a tagged release? (`v*`)
+2. Or manual dispatch with "Make Public" checked?
+
+**Verify**:
 ```bash
-# Check nftables rules
-sudo nft list ruleset
-
-# Check iptables rules
-sudo iptables -L -n -v
-
-# Test connectivity
-sudo tcpdump -i eth0 udp port 4789
+aws ec2 describe-images \
+  --image-ids ami-XXXXX \
+  --query 'Images[0].Public'
 ```
 
-### Packer Build Issues
+### Packer Validation Fails
 
+**Common causes**:
+- Syntax error in `graviton-vxlan-ami.pkr.hcl`
+- Missing required plugins
+- Invalid HCL2 formatting
+
+**Fix**:
 ```bash
-# Enable debug logging
-export PACKER_LOG=1
-packer build graviton-vxlan-ami.pkr.hcl
-
-# Validate configuration
-packer validate -syntax-check graviton-vxlan-ami.pkr.hcl
-
-# Check AWS credentials
-aws sts get-caller-identity
-
-# Verify AMI availability
-aws ec2 describe-images --owners 099720109477 --filters "Name=name,Values=ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-arm64-server-*" --query 'Images[0].ImageId'
+# Locally validate
+packer init graviton-vxlan-ami.pkr.hcl
+packer validate graviton-vxlan-ami.pkr.hcl
+packer fmt graviton-vxlan-ami.pkr.hcl
 ```
 
-## Advanced Configuration
+### Workflow Doesn't Trigger
 
-### Multi-VXLAN Setup
+**Check**:
+1. Workflow file is in `.github/workflows/`
+2. File is named with `.yml` or `.yaml` extension
+3. File is on the branch you're pushing to
+4. No YAML syntax errors
 
-To run multiple VXLAN interfaces, create additional service files:
-
+**Validate locally**:
 ```bash
-# Copy and modify for second VXLAN
-sudo cp /etc/systemd/system/vxlan.service /etc/systemd/system/vxlan2.service
-sudo vim /etc/systemd/system/vxlan2.service
-# Update VXLAN_ID, VXLAN_INTERFACE, etc.
-
-# Create a separate script with different parameters
-sudo cp /usr/local/bin/vxlan-setup.sh /usr/local/bin/vxlan2-setup.sh
-# Modify parameters in the new script
-
-sudo systemctl daemon-reload
-sudo systemctl enable vxlan2.service
-sudo systemctl start vxlan2.service
+# Check YAML syntax
+yamllint .github/workflows/build-ami.yml
 ```
 
-### Integration with Docker/Kubernetes
+## Cost Optimization
 
-The VXLAN interface can be used with containers:
+### Reduce Build Costs
 
-```bash
-# Connect container to VXLAN bridge
-docker run -d --name test --network=bridge \
-  --ip 10.200.0.10 \
-  alpine sleep 3600
+1. **Fewer Regions**: Build in 1 region for testing
+   ```yaml
+   matrix:
+     region: 
+       - us-east-1  # Only this region
+   ```
 
-# Add container to VXLAN bridge
-sudo ip link set dev veth... master br-vxlan
+2. **Skip Builds on Draft PRs**: Add condition
+   ```yaml
+   if: github.event.pull_request.draft == false
+   ```
+
+3. **Manual Builds**: Don't auto-build on every push
+   - Remove `push:` trigger
+   - Use `workflow_dispatch` only
+
+### Estimated Costs
+
+Per build (t4g.nano for ~15 minutes):
+- **Compute**: ~$0.001 (negligible)
+- **EBS**: ~$0.10 per month per AMI
+- **Snapshots**: ~$0.05 per GB per month
+
+Example for 3 regions:
+- **Initial build**: ~$0.003
+- **Monthly storage**: ~$0.30 (3 AMIs × $0.10)
+
+## Security Best Practices
+
+1. ✅ **Use OIDC** - No long-lived credentials
+2. ✅ **Least Privilege** - IAM role has minimal permissions
+3. ✅ **Audit Logs** - CloudTrail logs all AMI operations
+4. ✅ **Code Review** - Validate PR changes before merge
+5. ✅ **Signed Commits** - Require signed commits (optional)
+6. ✅ **Branch Protection** - Protect main branch
+
+### Recommended GitHub Settings
+
+```yaml
+Branch Protection Rules (main):
+✓ Require pull request reviews
+✓ Require status checks (validate job)
+✓ Require linear history
+✓ Require signed commits (optional)
+```
+
+## Advanced Usage
+
+### Build for Additional Architectures
+
+Currently builds ARM64 (Graviton). To also build x86_64:
+
+1. Add source in Packer config
+2. Update workflow matrix:
+   ```yaml
+   matrix:
+     region: [us-east-1, us-west-2]
+     architecture: [arm64, x86_64]
+   ```
+
+### Integrate with Terraform
+
+After AMIs are built, use them in Terraform:
+
+```hcl
+data "aws_ami" "vxlan_graviton" {
+  most_recent = true
+  owners      = ["self"]  # Or specific account ID if public
+  
+  filter {
+    name   = "name"
+    values = ["vxlan-graviton-v*"]
+  }
+  
+  filter {
+    name   = "tag:Version"
+    values = ["v1.0.0"]
+  }
+}
+
+resource "aws_instance" "vxlan_node" {
+  ami           = data.aws_ami.vxlan_graviton.id
+  instance_type = "t4g.nano"
+  # ...
+}
 ```
 
 ## References
 
-- [VXLAN RFC 7348](https://tools.ietf.org/html/rfc7348)
-- [Linux VXLAN Documentation](https://www.kernel.org/doc/Documentation/networking/vxlan.txt)
+- [GitHub Actions Documentation](https://docs.github.com/en/actions)
+- [AWS OIDC with GitHub Actions](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services)
 - [Packer Documentation](https://www.packer.io/docs)
-- [AWS Graviton](https://aws.amazon.com/ec2/graviton/)
-- [systemd.service Documentation](https://www.freedesktop.org/software/systemd/man/systemd.service.html)
+- [AWS EC2 AMI Documentation](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/AMIs.html)
+
+## Support
+
+If you encounter issues:
+
+1. Check [Troubleshooting](#troubleshooting) section
+2. Review workflow logs in Actions tab
+3. Check CloudTrail for AWS API errors
+4. Verify IAM permissions in AWS Console
 
 ## License
 
-These scripts are provided as-is for educational and operational use.
+This workflow configuration is provided as-is for educational and operational use.

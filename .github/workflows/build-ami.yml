@@ -1,0 +1,271 @@
+name: Build and Publish Graviton VXLAN AMI
+
+on:
+  push:
+    branches:
+      - main
+      - release/*
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      regions:
+        description: 'Comma-separated list of AWS regions to publish to'
+        required: false
+        default: 'us-east-1,us-west-2,eu-west-1'
+      make_public:
+        description: 'Make AMI public'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  PACKER_VERSION: '1.10.0'
+  AWS_REGION: 'us-east-1'
+  
+permissions:
+  id-token: write   # Required for OIDC
+  contents: write   # Required for creating releases
+  pull-requests: write
+
+jobs:
+  validate:
+    name: Validate Packer Configuration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Packer
+        uses: hashicorp/setup-packer@main
+        with:
+          version: ${{ env.PACKER_VERSION }}
+
+      - name: Initialize Packer
+        run: packer init graviton-vxlan-ami.pkr.hcl
+
+      - name: Validate Packer configuration
+        run: packer validate graviton-vxlan-ami.pkr.hcl
+
+      - name: Format check Packer files
+        run: |
+          packer fmt -check graviton-vxlan-ami.pkr.hcl || {
+            echo "Packer files are not formatted correctly"
+            echo "Run 'packer fmt graviton-vxlan-ami.pkr.hcl' locally"
+            exit 1
+          }
+
+  build-ami:
+    name: Build AMI in ${{ matrix.region }}
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name != 'pull_request'
+    strategy:
+      matrix:
+        region: 
+          - us-east-1
+          - us-west-2
+          - eu-west-1
+      fail-fast: false
+      max-parallel: 3
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Packer
+        uses: hashicorp/setup-packer@main
+        with:
+          version: ${{ env.PACKER_VERSION }}
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ matrix.region }}
+          role-session-name: GitHubActions-PackerBuild-${{ github.run_id }}
+
+      - name: Verify AWS credentials
+        run: |
+          aws sts get-caller-identity
+          echo "Building in region: ${{ matrix.region }}"
+
+      - name: Initialize Packer
+        run: packer init graviton-vxlan-ami.pkr.hcl
+
+      - name: Build AMI
+        id: build
+        run: |
+          # Determine version tag
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            VERSION="${{ github.ref_name }}"
+          else
+            VERSION="dev-$(date +%Y%m%d)-${GITHUB_SHA:0:7}"
+          fi
+          
+          echo "Building version: $VERSION"
+          
+          packer build \
+            -var "aws_region=${{ matrix.region }}" \
+            -var "ami_name_prefix=vxlan-graviton-${VERSION}" \
+            graviton-vxlan-ami.pkr.hcl
+          
+          # Extract AMI ID from manifest
+          AMI_ID=$(jq -r '.builds[-1].artifact_id' manifest.json | cut -d: -f2)
+          echo "ami_id=${AMI_ID}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          
+          # Save manifest for artifact
+          cp manifest.json manifest-${{ matrix.region }}.json
+
+      - name: Add tags to AMI
+        run: |
+          aws ec2 create-tags \
+            --resources ${{ steps.build.outputs.ami_id }} \
+            --tags \
+              Key=GitHubRepository,Value=${{ github.repository }} \
+              Key=GitHubRef,Value=${{ github.ref }} \
+              Key=GitHubSHA,Value=${{ github.sha }} \
+              Key=GitHubRunId,Value=${{ github.run_id }} \
+              Key=BuildDate,Value=$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
+              Key=Version,Value=${{ steps.build.outputs.version }}
+
+      - name: Make AMI public
+        if: |
+          github.event_name == 'workflow_dispatch' && github.event.inputs.make_public == 'true' ||
+          github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        run: |
+          echo "Making AMI ${{ steps.build.outputs.ami_id }} public..."
+          aws ec2 modify-image-attribute \
+            --image-id ${{ steps.build.outputs.ami_id }} \
+            --launch-permission "Add=[{Group=all}]"
+          
+          # Wait for propagation
+          sleep 5
+          
+          # Verify it's public
+          aws ec2 describe-images \
+            --image-ids ${{ steps.build.outputs.ami_id }} \
+            --query 'Images[0].Public' \
+            --output text
+
+      - name: Upload manifest artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ami-manifest-${{ matrix.region }}
+          path: manifest-${{ matrix.region }}.json
+          retention-days: 90
+
+      - name: Output AMI information
+        run: |
+          echo "### AMI Build Complete :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Region:** ${{ matrix.region }}" >> $GITHUB_STEP_SUMMARY
+          echo "**AMI ID:** \`${{ steps.build.outputs.ami_id }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.build.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Public:** ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.make_public || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### Launch Command" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "aws ec2 run-instances \\" >> $GITHUB_STEP_SUMMARY
+          echo "  --region ${{ matrix.region }} \\" >> $GITHUB_STEP_SUMMARY
+          echo "  --image-id ${{ steps.build.outputs.ami_id }} \\" >> $GITHUB_STEP_SUMMARY
+          echo "  --instance-type t4g.nano \\" >> $GITHUB_STEP_SUMMARY
+          echo "  --key-name YOUR_KEY \\" >> $GITHUB_STEP_SUMMARY
+          echo "  --security-group-ids YOUR_SG" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build-ami
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all manifests
+        uses: actions/download-artifact@v4
+        with:
+          path: manifests
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          echo "# Graviton VXLAN AMI Release ${{ github.ref_name }}" > release_notes.md
+          echo "" >> release_notes.md
+          echo "## AMI IDs by Region" >> release_notes.md
+          echo "" >> release_notes.md
+          
+          for manifest in manifests/*/manifest-*.json; do
+            region=$(basename $manifest | sed 's/manifest-//;s/.json//')
+            ami_id=$(jq -r '.builds[-1].artifact_id' $manifest | cut -d: -f2)
+            ami_name=$(jq -r '.builds[-1].custom_data.ami_name' $manifest)
+            
+            echo "- **${region}**: \`${ami_id}\`" >> release_notes.md
+          done
+          
+          echo "" >> release_notes.md
+          echo "## Launch Instance" >> release_notes.md
+          echo "" >> release_notes.md
+          echo '```bash' >> release_notes.md
+          echo 'aws ec2 run-instances \' >> release_notes.md
+          echo '  --image-id <AMI_ID_FROM_ABOVE> \' >> release_notes.md
+          echo '  --instance-type t4g.nano \' >> release_notes.md
+          echo '  --key-name YOUR_KEY_PAIR \' >> release_notes.md
+          echo '  --security-group-ids YOUR_SECURITY_GROUP \' >> release_notes.md
+          echo '  --subnet-id YOUR_SUBNET' >> release_notes.md
+          echo '```' >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## Features" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "- VXLAN interface pre-configured (vxlan0)" >> release_notes.md
+          echo "- Systemd service for automatic startup" >> release_notes.md
+          echo "- UDP port 4789 configured for VXLAN traffic" >> release_notes.md
+          echo "- Bridge interface (br-vxlan) ready for overlay networking" >> release_notes.md
+          echo "- ARM64/Graviton optimized" >> release_notes.md
+          echo "- Based on Ubuntu 22.04 LTS" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## Security Considerations" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "⚠️ **Important**: Configure AWS Security Groups to restrict VXLAN traffic (UDP 4789) to trusted sources only." >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## Quick Setup" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "After launching the instance, VXLAN is already configured but you may need to add remote endpoints:" >> release_notes.md
+          echo "" >> release_notes.md
+          echo '```bash' >> release_notes.md
+          echo '# Add remote VXLAN endpoint' >> release_notes.md
+          echo 'sudo bridge fdb append 00:00:00:00:00:00 dev vxlan0 dst <REMOTE_IP>' >> release_notes.md
+          echo '```' >> release_notes.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: release_notes.md
+          files: manifests/*/manifest-*.json
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify-failure:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: [validate, build-ami]
+    if: failure() && github.event_name != 'pull_request'
+    
+    steps:
+      - name: Create failure summary
+        run: |
+          echo "### Build Failed :x:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The AMI build process failed. Please check the logs above." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Run ID:** ${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Ref:** ${{ github.ref }}" >> $GITHUB_STEP_SUMMARY

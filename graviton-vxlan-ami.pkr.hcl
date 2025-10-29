@@ -79,7 +79,7 @@ source "amazon-ebs" "graviton_vxlan" {
   # Tags
   tags = {
     Name         = "${var.ami_name_prefix}-{{timestamp}}"
-    OS           = "Ubuntu 22.04"
+    OS           = "Ubuntu 24.04"
     Architecture = "ARM64"
     Processor    = "Graviton"
     Purpose      = "VXLAN Network"
