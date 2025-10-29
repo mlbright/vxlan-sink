@@ -20,6 +20,7 @@ secrets.pkrvars.hcl
 *.tfstate
 *.tfstate.*
 .terraform.lock.hcl
+*.tfvars
 
 # OS files
 .DS_Store
