@@ -72,6 +72,7 @@ This document provides visual diagrams and explanations of the automated AMI bui
 │  │              │  │              │  │              │          │
 │  │ 1. Launch    │  │ 1. Launch    │  │ 1. Launch    │          │
 │  │    t4g.nano  │  │    t4g.nano  │  │    t4g.nano  │          │
+│  │ Ubuntu 24.04 │  │ Ubuntu 24.04 │  │ Ubuntu 24.04 │          │
 │  │              │  │              │  │              │          │
 │  │ 2. Provision │  │ 2. Provision │  │ 2. Provision │          │
 │  │    VXLAN     │  │    VXLAN     │  │    VXLAN     │          │
@@ -206,19 +207,20 @@ START
   │      - Ubuntu 22.04 ARM64 base AMI
   │      - Temporary security group
   │
-  ├──> 2. Wait for instance ready
-  │      - SSH connectivity
-  │      - Cloud-init complete
-  │
-  ├──> 3. Provision instance
-  │      ├──> Update packages
-  │      ├──> Install dependencies
-  │      │      - bridge-utils
-  │      │      - iproute2
-  │      │      - nftables
-  │      ├──> Copy VXLAN scripts
-  │      ├──> Install systemd service
-  │      └──> Configure sysctl
+  │  ├──> 2. Wait for instance ready
+│      - SSH connectivity
+│      - Cloud-init complete
+│
+│  ├──> 3. Provision instance
+│      ├──> Update packages
+│      ├──> Install dependencies
+│      │      - iproute2
+│      │      - nftables (Ubuntu 24.04 LTS)
+│      │      - net-tools
+│      │      - tcpdump
+│      ├──> Copy VXLAN scripts
+│      ├──> Install systemd service
+│      └──> Configure sysctl
   │
   ├──> 4. Create AMI
   │      ├──> Stop instance

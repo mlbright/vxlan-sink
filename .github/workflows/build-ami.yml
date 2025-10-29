@@ -226,9 +226,9 @@ jobs:
           echo "- VXLAN interface pre-configured (vxlan0)" >> release_notes.md
           echo "- Systemd service for automatic startup" >> release_notes.md
           echo "- UDP port 4789 configured for VXLAN traffic" >> release_notes.md
-          echo "- Bridge interface (br-vxlan) ready for overlay networking" >> release_notes.md
+          echo "- Auto-detects and links to first physical network interface" >> release_notes.md
           echo "- ARM64/Graviton optimized" >> release_notes.md
-          echo "- Based on Ubuntu 22.04 LTS" >> release_notes.md
+          echo "- Based on Ubuntu 24.04 LTS" >> release_notes.md
           echo "" >> release_notes.md
           echo "## Security Considerations" >> release_notes.md
           echo "" >> release_notes.md

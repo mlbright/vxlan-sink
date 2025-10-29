@@ -267,7 +267,7 @@ ssh ubuntu@$INSTANCE_IP
 # Check VXLAN is running
 sudo systemctl status vxlan.service
 ip link show vxlan0
-ip addr show br-vxlan
+ip addr show vxlan0
 ```
 
 ✅ Your VXLAN interface should be up and running!
@@ -306,9 +306,9 @@ strategy:
 Edit `vxlan-setup.sh`:
 
 ```bash
-VXLAN_ID="100"           # Your VXLAN ID
-VXLAN_PORT="4789"        # Your port
-BRIDGE_IP="10.200.0.1/24"  # Your network
+VXLAN_ID="1337"           # Your VXLAN ID
+VXLAN_PORT="4789"         # Your port
+VXLAN_IP="10.200.0.1/24"  # Your VXLAN network
 ```
 
 Rebuild AMI:

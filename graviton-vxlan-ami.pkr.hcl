@@ -36,7 +36,7 @@ variable "volume_size" {
 # Data source for latest Ubuntu ARM64 AMI
 data "amazon-ami" "ubuntu_arm64" {
   filters = {
-    name                = "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-arm64-server-*"
+    name                = "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-arm64-server-*"
     root-device-type    = "ebs"
     virtualization-type = "hvm"
   }
@@ -49,7 +49,7 @@ data "amazon-ami" "ubuntu_arm64" {
 source "amazon-ebs" "graviton_vxlan" {
   # AMI Configuration
   ami_name        = "${var.ami_name_prefix}-{{timestamp}}"
-  ami_description = "Ubuntu 22.04 ARM64 with VXLAN support on Graviton"
+  ami_description = "Ubuntu 24.04 LTS ARM64 with VXLAN support on Graviton"
   
   # Instance Configuration
   instance_type = var.instance_type
@@ -127,7 +127,7 @@ build {
   provisioner "shell" {
     inline = [
       "echo 'Installing required packages...'",
-      "sudo apt-get install -y bridge-utils iproute2 nftables net-tools tcpdump",
+      "sudo apt-get install -y iproute2 nftables net-tools tcpdump",
       "echo 'Required packages installed'"
     ]
   }

@@ -113,15 +113,15 @@ Done! Check the Actions tab for build progress.
 
 | File | Description |
 |------|-------------|
-| `vxlan-setup.sh` | Creates VXLAN interface, bridge, and firewall rules |
+| `vxlan-setup.sh` | Creates VXLAN interface and firewall rules |
 | `vxlan-teardown.sh` | Removes VXLAN configuration |
 | `vxlan.service` | Systemd unit for automatic startup |
 | `install-vxlan-service.sh` | Installation helper |
 
 **Configuration:**
-- VXLAN ID: 100 (customizable)
+- VXLAN ID: 1337 (customizable)
 - Port: 4789 (UDP)
-- Bridge: br-vxlan
+- Auto-detects first physical interface (eth0, ens5, etc.)
 - Default network: 10.200.0.1/24
 
 ### 2. Packer Configuration
@@ -134,7 +134,7 @@ Done! Check the Actions tab for build progress.
 | `variables.pkrvars.hcl.example` | Variable template |
 
 **Build specification:**
-- Base: Ubuntu 22.04 ARM64
+- Base: Ubuntu 24.04 LTS ARM64
 - Instance: t4g.nano (cheapest Graviton)
 - Provisioning: ~15 minutes
 - Output: AMI + snapshots
@@ -286,7 +286,7 @@ Edit `vxlan-setup.sh`:
 ```bash
 VXLAN_ID="200"              # Change VXLAN ID
 VXLAN_PORT="4789"           # Change port
-BRIDGE_IP="192.168.0.1/24"  # Change network
+VXLAN_IP="192.168.0.1/24"   # Change VXLAN network
 ```
 
 ### Add More Regions
@@ -328,7 +328,7 @@ chmod +x vxlan-setup.sh vxlan-teardown.sh
 sudo ./vxlan-setup.sh
 # Verify
 ip link show vxlan0
-ip addr show br-vxlan
+ip addr show vxlan0
 # Cleanup
 sudo ./vxlan-teardown.sh
 ```
