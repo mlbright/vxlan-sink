@@ -1,10 +1,10 @@
 terraform {
-  required_version = ">= 1.5.0"
-  
+  required_version = ">= 1.13.4"
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.0"
+      version = "~> 6.0"
     }
   }
 }
@@ -53,9 +53,9 @@ resource "aws_iam_openid_connect_provider" "github" {
   ]
 
   tags = {
-    Name        = "GitHub Actions OIDC Provider"
-    ManagedBy   = "Terraform"
-    Purpose     = "GitHub Actions OIDC Authentication"
+    Name      = "GitHub Actions OIDC Provider"
+    ManagedBy = "Terraform"
+    Purpose   = "GitHub Actions OIDC Authentication"
   }
 }
 
@@ -98,9 +98,9 @@ resource "aws_iam_role" "github_actions" {
   max_session_duration = 3600 # 1 hour
 
   tags = {
-    Name        = "GitHub Actions Packer AMI Builder"
-    ManagedBy   = "Terraform"
-    Repository  = "${var.github_org}/${var.github_repo}"
+    Name       = "GitHub Actions Packer AMI Builder"
+    ManagedBy  = "Terraform"
+    Repository = "${var.github_org}/${var.github_repo}"
   }
 }
 
@@ -253,7 +253,7 @@ output "github_actions_role_name" {
 
 output "next_steps" {
   description = "Instructions for completing the setup"
-  value = <<-EOT
+  value       = <<-EOT
     
     ╔════════════════════════════════════════════════════════════════════╗
     ║  GitHub OIDC Setup Complete!                                       ║
