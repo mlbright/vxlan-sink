@@ -6,43 +6,43 @@ set -euo pipefail
 
 # Configuration variables
 VXLAN_INTERFACE="vxlan0"
-VXLAN_ID="100"
+VXLAN_ID="1337"
 VXLAN_PORT="4789"
-VXLAN_DEV="eth0"  # Physical interface to bind to - adjust as needed
+VXLAN_DEV="eth0" # Physical interface to bind to - adjust as needed
 VXLAN_LOCAL_IP=$(ip -4 addr show ${VXLAN_DEV} | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1)
 BRIDGE_INTERFACE="br-vxlan"
-BRIDGE_IP="10.200.0.1/24"  # Adjust to your network
+BRIDGE_IP="10.200.0.1/24" # Adjust to your network
 
 echo "Starting VXLAN interface configuration..."
 
 # Check if running as root
 if [[ $EUID -ne 0 ]]; then
-   echo "This script must be run as root" 
-   exit 1
+  echo "This script must be run as root"
+  exit 1
 fi
 
 # Clean up existing interfaces if they exist
-if ip link show ${VXLAN_INTERFACE} &> /dev/null; then
-    echo "Removing existing VXLAN interface ${VXLAN_INTERFACE}..."
-    ip link set ${VXLAN_INTERFACE} down 2>/dev/null || true
-    ip link delete ${VXLAN_INTERFACE} 2>/dev/null || true
+if ip link show ${VXLAN_INTERFACE} &>/dev/null; then
+  echo "Removing existing VXLAN interface ${VXLAN_INTERFACE}..."
+  ip link set ${VXLAN_INTERFACE} down 2>/dev/null || true
+  ip link delete ${VXLAN_INTERFACE} 2>/dev/null || true
 fi
 
-if ip link show ${BRIDGE_INTERFACE} &> /dev/null; then
-    echo "Removing existing bridge interface ${BRIDGE_INTERFACE}..."
-    ip link set ${BRIDGE_INTERFACE} down 2>/dev/null || true
-    ip link delete ${BRIDGE_INTERFACE} 2>/dev/null || true
+if ip link show ${BRIDGE_INTERFACE} &>/dev/null; then
+  echo "Removing existing bridge interface ${BRIDGE_INTERFACE}..."
+  ip link set ${BRIDGE_INTERFACE} down 2>/dev/null || true
+  ip link delete ${BRIDGE_INTERFACE} 2>/dev/null || true
 fi
 
 # Create VXLAN interface
 # Using 'group 239.1.1.1' for multicast, or you can use specific remote IPs
 echo "Creating VXLAN interface ${VXLAN_INTERFACE}..."
 ip link add ${VXLAN_INTERFACE} type vxlan \
-    id ${VXLAN_ID} \
-    dstport ${VXLAN_PORT} \
-    local ${VXLAN_LOCAL_IP} \
-    dev ${VXLAN_DEV} \
-    nolearning
+  id ${VXLAN_ID} \
+  dstport ${VXLAN_PORT} \
+  local "${VXLAN_LOCAL_IP}" \
+  dev ${VXLAN_DEV} \
+  nolearning
 
 # Create bridge and attach VXLAN
 echo "Creating bridge interface ${BRIDGE_INTERFACE}..."
@@ -60,19 +60,19 @@ ip addr add ${BRIDGE_IP} dev ${BRIDGE_INTERFACE}
 
 # Configure firewall to accept VXLAN traffic on port 4789 from any source
 echo "Configuring firewall rules for VXLAN..."
-if command -v nft &> /dev/null; then
-    # Using nftables
-    nft add table inet vxlan 2>/dev/null || true
-    nft add chain inet vxlan input { type filter hook input priority 0 \; } 2>/dev/null || true
-    nft add rule inet vxlan input udp dport ${VXLAN_PORT} accept
-    echo "Added nftables rule to accept UDP port ${VXLAN_PORT}"
-elif command -v iptables &> /dev/null; then
-    # Fallback to iptables
-    iptables -C INPUT -p udp --dport ${VXLAN_PORT} -j ACCEPT 2>/dev/null || \
-        iptables -A INPUT -p udp --dport ${VXLAN_PORT} -j ACCEPT
-    echo "Added iptables rule to accept UDP port ${VXLAN_PORT}"
+if command -v nft &>/dev/null; then
+  # Using nftables
+  nft add table inet vxlan 2>/dev/null || true
+  nft add chain inet vxlan input { type filter hook input priority 0 \; } 2>/dev/null || true
+  nft add rule inet vxlan input udp dport ${VXLAN_PORT} accept
+  echo "Added nftables rule to accept UDP port ${VXLAN_PORT}"
+elif command -v iptables &>/dev/null; then
+  # Fallback to iptables
+  iptables -C INPUT -p udp --dport ${VXLAN_PORT} -j ACCEPT 2>/dev/null ||
+    iptables -A INPUT -p udp --dport ${VXLAN_PORT} -j ACCEPT
+  echo "Added iptables rule to accept UDP port ${VXLAN_PORT}"
 else
-    echo "Warning: Neither nftables nor iptables found. Please configure firewall manually."
+  echo "Warning: Neither nftables nor iptables found. Please configure firewall manually."
 fi
 
 # Display interface information
