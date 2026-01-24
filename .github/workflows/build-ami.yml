@@ -15,7 +15,7 @@ on:
       regions:
         description: "Comma-separated list of AWS regions to publish to"
         required: false
-        default: "us-east-1,us-west-2,eu-west-1"
+        default: "us-east-1"
       make_public:
         description: "Make AMI public"
         required: false

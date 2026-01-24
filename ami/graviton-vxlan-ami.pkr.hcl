@@ -184,7 +184,6 @@ build {
       "sudo rm -rf /var/lib/apt/lists/*",
       "sudo rm -rf /tmp/*",
       "sudo rm -rf /var/tmp/*",
-      "history -c",
       "echo 'Cleanup completed'"
     ]
   }
