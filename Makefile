@@ -2,7 +2,7 @@
 
 # Default target
 help:
-	@echo "VXLAN + Graviton AMI Builder"
+	@echo "VXLAN sink AMI Builder"
 	@echo "============================="
 	@echo ""
 	@echo "Packer Commands:"
@@ -24,46 +24,46 @@ help:
 # Initialize Packer
 init:
 	@echo "Initializing Packer..."
-	packer init graviton-vxlan-ami.pkr.hcl
+	packer init ami/graviton-vxlan-ami.pkr.hcl
 
 # Validate Packer configuration
 validate: init
 	@echo "Validating Packer configuration..."
-	packer validate graviton-vxlan-ami.pkr.hcl
+	packer validate ami/graviton-vxlan-ami.pkr.hcl
 
 # Format Packer files
 fmt:
 	@echo "Formatting Packer HCL files..."
-	packer fmt graviton-vxlan-ami.pkr.hcl
-	packer fmt variables.pkrvars.hcl.example
+	packer fmt ami/graviton-vxlan-ami.pkr.hcl
+	packer fmt ami/variables.pkrvars.hcl.example
 
 # Build AMI with default settings (t4g.nano)
 build: validate
 	@echo "Building AMI with t4g.nano (cheapest Graviton instance)..."
-	packer build graviton-vxlan-ami.pkr.hcl
+	packer build ami/graviton-vxlan-ami.pkr.hcl
 
 # Build with t4g.micro
 build-micro: validate
 	@echo "Building AMI with t4g.micro..."
-	packer build -var="instance_type=t4g.micro" graviton-vxlan-ami.pkr.hcl
+	packer build -var="instance_type=t4g.micro" ami/graviton-vxlan-ami.pkr.hcl
 
 # Build with t4g.small
 build-small: validate
 	@echo "Building AMI with t4g.small..."
-	packer build -var="instance_type=t4g.small" graviton-vxlan-ami.pkr.hcl
+	packer build -var="instance_type=t4g.small" ami/graviton-vxlan-ami.pkr.hcl
 
 # Build with custom region
 build-region: validate
 	@echo "Building AMI in $(REGION)..."
 	@test -n "$(REGION)" || (echo "ERROR: REGION not set. Usage: make build-region REGION=us-west-2"; exit 1)
-	packer build -var="aws_region=$(REGION)" graviton-vxlan-ami.pkr.hcl
+	packer build -var="aws_region=$(REGION)" ami/graviton-vxlan-ami.pkr.hcl
 
 # Setup file permissions
 setup:
 	@echo "Setting executable permissions on scripts..."
-	chmod +x vxlan-setup.sh
-	chmod +x vxlan-teardown.sh
-	chmod +x install-vxlan-service.sh
+	chmod +x ami/vxlan-setup.sh
+	chmod +x ami/vxlan-teardown.sh
+	chmod +x ami/install-vxlan-service.sh
 
 # Install VXLAN systemd service
 install-vxlan: setup
@@ -73,7 +73,7 @@ install-vxlan: setup
 		echo "Usage: sudo make install-vxlan"; \
 		exit 1; \
 	fi
-	./install-vxlan-service.sh
+	./ami/install-vxlan-service.sh
 
 # Test VXLAN without systemd
 test-vxlan: setup
@@ -83,11 +83,11 @@ test-vxlan: setup
 		echo "Usage: sudo make test-vxlan"; \
 		exit 1; \
 	fi
-	./vxlan-setup.sh
+	./ami/vxlan-setup.sh
 	@echo ""
 	@echo "VXLAN interface is up. Press Enter to tear down..."
 	@read dummy
-	./vxlan-teardown.sh
+	./ami/vxlan-teardown.sh
 
 # Clean build artifacts
 clean:

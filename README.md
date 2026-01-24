@@ -451,30 +451,110 @@ Currently builds ARM64 (Graviton). To also build x86_64:
 
 ### Integrate with Terraform
 
-After AMIs are built, use them in Terraform:
+Use the included Terraform module to deploy VXLAN sink instances:
 
 ```hcl
-data "aws_ami" "vxlan_graviton" {
-  most_recent = true
-  owners      = ["self"]  # Or specific account ID if public
-  
-  filter {
-    name   = "name"
-    values = ["vxlan-graviton-v*"]
-  }
-  
-  filter {
-    name   = "tag:Version"
-    values = ["v1.0.0"]
-  }
-}
+module "vxlan_sink" {
+  source = "github.com/mlbright/vxlan-sink//terraform"
 
-resource "aws_instance" "vxlan_node" {
-  ami           = data.aws_ami.vxlan_graviton.id
-  instance_type = "t4g.nano"
-  # ...
+  vpc_id             = "vpc-xxx"
+  subnet_id          = "subnet-xxx"
+  vxlan_source_cidrs = ["10.0.0.0/8"]
 }
 ```
+
+See [Terraform Module](#terraform-module) section below for detailed usage.
+
+## Terraform Module
+
+This repository includes a Terraform module for deploying VXLAN sink instances into existing AWS VPCs.
+
+### Module Source
+
+```hcl
+source = "github.com/mlbright/vxlan-sink//terraform"
+```
+
+### Usage: Automatic AMI Lookup
+
+The module can automatically find the latest VXLAN AMI by name prefix:
+
+```hcl
+module "vxlan_sink" {
+  source = "github.com/mlbright/vxlan-sink//terraform"
+
+  # AMI lookup by prefix (default: "vxlan-graviton")
+  ami_name_prefix    = "vxlan-graviton"
+
+  # Required: Network configuration
+  vpc_id             = "vpc-0123456789abcdef0"
+  subnet_id          = "subnet-0123456789abcdef0"
+
+  # Required: VXLAN source CIDRs
+  vxlan_source_cidrs = ["10.0.0.0/8"]
+
+  # Optional: Enable SSH access (disabled by default)
+  # ssh_source_cidrs = ["10.0.0.0/8"]
+  # key_name         = "my-key-pair"
+
+  tags = {
+    Environment = "production"
+  }
+}
+```
+
+### Usage: Explicit AMI ID
+
+If you know the specific AMI ID to use:
+
+```hcl
+module "vxlan_sink" {
+  source = "github.com/mlbright/vxlan-sink//terraform"
+
+  # Explicit AMI ID
+  ami_id             = "ami-0123456789abcdef0"
+
+  # Required: Network configuration
+  vpc_id             = "vpc-0123456789abcdef0"
+  subnet_id          = "subnet-0123456789abcdef0"
+
+  # Required: VXLAN source CIDRs
+  vxlan_source_cidrs = ["10.0.0.0/8"]
+}
+```
+
+### Module Inputs
+
+| Variable | Type | Default | Required | Description |
+|----------|------|---------|----------|-------------|
+| `ami_id` | string | `null` | No | Explicit AMI ID (if null, uses lookup) |
+| `ami_name_prefix` | string | `"vxlan-graviton"` | No | AMI name prefix for automatic lookup |
+| `instance_type` | string | `"t4g.nano"` | No | EC2 instance type (ARM64/Graviton) |
+| `vpc_id` | string | - | **Yes** | VPC ID to deploy into |
+| `subnet_id` | string | - | **Yes** | Subnet ID for the instance |
+| `key_name` | string | `null` | No | SSH key pair name |
+| `vxlan_source_cidrs` | list(string) | - | **Yes** | CIDRs allowed VXLAN traffic (UDP 4789) |
+| `ssh_source_cidrs` | list(string) | `[]` | No | CIDRs allowed SSH access (empty = disabled) |
+| `iam_instance_profile` | string | `null` | No | IAM instance profile name |
+| `name` | string | `"vxlan-sink"` | No | Name prefix for resources |
+| `tags` | map(string) | `{}` | No | Additional tags for resources |
+
+### Module Outputs
+
+| Output | Description |
+|--------|-------------|
+| `instance_id` | EC2 instance ID |
+| `private_ip` | Private IP address |
+| `security_group_id` | Security group ID |
+| `ami_id` | Resolved AMI ID |
+| `vxlan_endpoint` | VXLAN endpoint (`private_ip:4789`) |
+
+### Examples
+
+See [terraform/examples/](terraform/examples/) for complete working examples:
+
+- [explicit-ami](terraform/examples/explicit-ami/) - Deploy with a known AMI ID
+- [ami-lookup](terraform/examples/ami-lookup/) - Deploy with automatic AMI discovery
 
 ## References
 

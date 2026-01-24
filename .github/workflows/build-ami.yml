@@ -45,16 +45,16 @@ jobs:
           version: ${{ env.PACKER_VERSION }}
 
       - name: Initialize Packer
-        run: packer init graviton-vxlan-ami.pkr.hcl
+        run: packer init ami/graviton-vxlan-ami.pkr.hcl
 
       - name: Validate Packer configuration
-        run: packer validate graviton-vxlan-ami.pkr.hcl
+        run: packer validate ami/graviton-vxlan-ami.pkr.hcl
 
       - name: Format check Packer files
         run: |
-          packer fmt -check graviton-vxlan-ami.pkr.hcl || {
+          packer fmt -check ami/graviton-vxlan-ami.pkr.hcl || {
             echo "Packer files are not formatted correctly"
-            echo "Run 'packer fmt graviton-vxlan-ami.pkr.hcl' locally"
+            echo "Run 'packer fmt ami/graviton-vxlan-ami.pkr.hcl' locally"
             exit 1
           }
 
@@ -94,7 +94,7 @@ jobs:
           echo "Building in region: ${{ matrix.region }}"
 
       - name: Initialize Packer
-        run: packer init graviton-vxlan-ami.pkr.hcl
+        run: packer init ami/graviton-vxlan-ami.pkr.hcl
 
       - name: Build AMI
         id: build
@@ -111,7 +111,7 @@ jobs:
           packer build \
             -var "aws_region=${{ matrix.region }}" \
             -var "ami_name_prefix=vxlan-graviton-${VERSION}" \
-            graviton-vxlan-ami.pkr.hcl
+            ami/graviton-vxlan-ami.pkr.hcl
 
           # Extract AMI ID from manifest
           AMI_ID=$(jq -r '.builds[-1].artifact_id' manifest.json | cut -d: -f2)

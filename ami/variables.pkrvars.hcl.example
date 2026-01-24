@@ -13,7 +13,7 @@ aws_region = "us-east-1"
 instance_type = "t4g.nano"
 
 # Prefix for the AMI name (timestamp will be appended)
-ami_name_prefix = "vxlan-graviton"
+ami_name_prefix = "vxlan-sink"
 
 # SSH username for Ubuntu
 ssh_username = "ubuntu"

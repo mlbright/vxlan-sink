@@ -50,16 +50,16 @@ source "amazon-ebs" "graviton_vxlan" {
   # AMI Configuration
   ami_name        = "${var.ami_name_prefix}-{{timestamp}}"
   ami_description = "Ubuntu 24.04 LTS ARM64 with VXLAN support on Graviton"
-  
+
   # Instance Configuration
   instance_type = var.instance_type
   region        = var.aws_region
   source_ami    = data.amazon-ami.ubuntu_arm64.id
-  
+
   # SSH Configuration
   ssh_username = var.ssh_username
   ssh_timeout  = "10m"
-  
+
   # EBS Volume Configuration
   launch_block_device_mappings {
     device_name           = "/dev/sda1"
@@ -67,7 +67,7 @@ source "amazon-ebs" "graviton_vxlan" {
     volume_type           = "gp3"
     delete_on_termination = true
   }
-  
+
   # AMI Block Device Mappings
   ami_block_device_mappings {
     device_name           = "/dev/sda1"
@@ -75,7 +75,7 @@ source "amazon-ebs" "graviton_vxlan" {
     volume_type           = "gp3"
     delete_on_termination = true
   }
-  
+
   # Tags
   tags = {
     Name         = "${var.ami_name_prefix}-{{timestamp}}"
@@ -85,17 +85,17 @@ source "amazon-ebs" "graviton_vxlan" {
     Purpose      = "VXLAN Network"
     BuildDate    = "{{timestamp}}"
   }
-  
+
   # Run tags (tags applied to the builder instance)
   run_tags = {
     Name    = "Packer Builder - ${var.ami_name_prefix}"
     Purpose = "AMI Build"
   }
-  
+
   # Snapshot tags
   snapshot_tags = {
-    Name         = "${var.ami_name_prefix}-snapshot-{{timestamp}}"
-    Purpose      = "VXLAN Network AMI Snapshot"
+    Name    = "${var.ami_name_prefix}-snapshot-{{timestamp}}"
+    Purpose = "VXLAN Network AMI Snapshot"
   }
 }
 
@@ -103,7 +103,7 @@ source "amazon-ebs" "graviton_vxlan" {
 build {
   name    = "graviton-vxlan-ami"
   sources = ["source.amazon-ebs.graviton_vxlan"]
-  
+
   # Wait for cloud-init to complete
   provisioner "shell" {
     inline = [
@@ -112,7 +112,7 @@ build {
       "echo 'Cloud-init completed'"
     ]
   }
-  
+
   # Update system packages
   provisioner "shell" {
     inline = [
@@ -122,7 +122,7 @@ build {
       "echo 'System packages updated'"
     ]
   }
-  
+
   # Install required packages
   provisioner "shell" {
     inline = [
@@ -131,23 +131,23 @@ build {
       "echo 'Required packages installed'"
     ]
   }
-  
+
   # Copy VXLAN scripts
   provisioner "file" {
-    source      = "vxlan-setup.sh"
+    source      = "ami/vxlan-setup.sh"
     destination = "/tmp/vxlan-setup.sh"
   }
-  
+
   provisioner "file" {
-    source      = "vxlan-teardown.sh"
+    source      = "ami/vxlan-teardown.sh"
     destination = "/tmp/vxlan-teardown.sh"
   }
-  
+
   provisioner "file" {
-    source      = "vxlan.service"
+    source      = "ami/vxlan.service"
     destination = "/tmp/vxlan.service"
   }
-  
+
   # Install VXLAN configuration
   provisioner "shell" {
     inline = [
@@ -161,7 +161,7 @@ build {
       "rm /tmp/vxlan-setup.sh /tmp/vxlan-teardown.sh /tmp/vxlan.service"
     ]
   }
-  
+
   # Enable IP forwarding for VXLAN
   provisioner "shell" {
     inline = [
@@ -175,7 +175,7 @@ build {
       "echo 'IP forwarding configured'"
     ]
   }
-  
+
   # Clean up
   provisioner "shell" {
     inline = [
@@ -188,7 +188,7 @@ build {
       "echo 'Cleanup completed'"
     ]
   }
-  
+
   # Post-processor to create manifest
   post-processor "manifest" {
     output     = "manifest.json"
