@@ -30,7 +30,7 @@ variable "ssh_username" {
 
 variable "volume_size" {
   type    = number
-  default = 8
+  default = 16
 }
 
 # Data source for latest Ubuntu ARM64 AMI
