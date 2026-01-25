@@ -67,8 +67,6 @@ jobs:
       matrix:
         region:
           - us-east-1
-          - us-west-2
-          - eu-west-1
       fail-fast: false
       max-parallel: 3
 

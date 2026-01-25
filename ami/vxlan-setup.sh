@@ -8,7 +8,6 @@ set -euo pipefail
 VXLAN_INTERFACE="vxlan0"
 VXLAN_ID="1337"
 VXLAN_PORT="4789"
-VXLAN_IP="10.200.0.1/24" # IP address for the VXLAN interface
 
 # Auto-detect the first non-loopback physical interface
 PHYSICAL_INTERFACE=$(ip -o link show | awk -F': ' '$2 !~ /^(lo|docker|br-|veth|virbr)/ {print $2; exit}')
@@ -51,23 +50,6 @@ ip link add ${VXLAN_INTERFACE} type vxlan \
 echo "Bringing up VXLAN interface..."
 ip link set ${VXLAN_INTERFACE} up
 
-# Assign IP to VXLAN interface
-echo "Configuring VXLAN IP ${VXLAN_IP}..."
-ip addr add ${VXLAN_IP} dev ${VXLAN_INTERFACE}
-
-# Configure firewall to accept VXLAN traffic on port 4789 from any source
-echo "Configuring firewall rules for VXLAN..."
-if ! command -v nft &>/dev/null; then
-  echo "Error: nftables not found. Please install nftables package."
-  exit 1
-fi
-
-# Using nftables
-nft add table inet vxlan 2>/dev/null || true
-nft add chain inet vxlan input { type filter hook input priority 0 \; } 2>/dev/null || true
-nft add rule inet vxlan input udp dport ${VXLAN_PORT} accept
-echo "Added nftables rule to accept UDP port ${VXLAN_PORT}"
-
 # Display interface information
 echo ""
 echo "VXLAN configuration complete!"
@@ -81,7 +63,6 @@ echo "Physical Interface: ${PHYSICAL_INTERFACE}"
 echo "VXLAN ID: ${VXLAN_ID}"
 echo "VXLAN Port: ${VXLAN_PORT}"
 echo "Local IP: ${VXLAN_LOCAL_IP}"
-echo "VXLAN IP: ${VXLAN_IP}"
 echo ""
 echo "To add remote VXLAN endpoints, use:"
 echo "  bridge fdb append 00:00:00:00:00:00 dev ${VXLAN_INTERFACE} dst <REMOTE_IP>"

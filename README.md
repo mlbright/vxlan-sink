@@ -1,22 +1,17 @@
 # VXLAN Sink
 
-A complete solution for deploying VXLAN receiver/sink virtual machines on AWS using Graviton (ARM64) instances.
-
-## Overview
-
 This repository provides two key capabilities:
 
 1. **AMI Building** — Packer configuration to build a pre-configured VXLAN receiver AMI
 2. **Terraform Module** — Deploy the VXLAN sink into any existing AWS VPC
 
-### What is a VXLAN Sink?
+### What do you mean by a VXLAN Sink?
 
-A VXLAN sink is a virtual machine configured to receive VXLAN-encapsulated traffic. VXLAN (Virtual Extensible LAN) is an overlay network protocol that encapsulates Layer 2 Ethernet frames within UDP packets, enabling network virtualization across Layer 3 boundaries.
+A virtual machine configured to receive VXLAN-encapsulated traffic. VXLAN (Virtual Extensible LAN) is an overlay network protocol that encapsulates Layer 2 Ethernet frames within UDP packets, enabling network virtualization across Layer 3 boundaries.
 
 This implementation creates a `vxlan0` interface that:
 - Listens on UDP port 4789 (standard VXLAN port)
 - Uses VXLAN ID 1337
-- Assigns IP 10.200.0.1/24 to the VXLAN interface
 - Starts automatically on boot via systemd
 
 ### Why Graviton?
@@ -156,7 +151,6 @@ Edit `ami/vxlan-setup.sh` before building:
 ```bash
 VXLAN_ID="1337"           # Your VXLAN ID
 VXLAN_PORT="4789"         # Your port
-VXLAN_IP="10.200.0.1/24"  # Your VXLAN network
 ```
 
 ---
