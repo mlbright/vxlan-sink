@@ -19,7 +19,6 @@ module "vxlan_sink" {
 
   vpc_id             = "vpc-xxx"
   subnet_id          = "subnet-xxx"
-  vxlan_source_cidrs = ["10.0.0.0/8"]
 }
 ```
 
@@ -32,7 +31,6 @@ module "vxlan_sink" {
   ami_id             = "ami-0123456789abcdef0"
   vpc_id             = "vpc-xxx"
   subnet_id          = "subnet-xxx"
-  vxlan_source_cidrs = ["10.0.0.0/8"]
 }
 ```
 
@@ -44,7 +42,6 @@ module "vxlan_sink" {
 
   vpc_id             = "vpc-xxx"
   subnet_id          = "subnet-xxx"
-  vxlan_source_cidrs = ["10.0.0.0/8"]
   ssh_source_cidrs   = ["10.0.0.0/8"]
   key_name           = "my-key-pair"
 }
@@ -67,7 +64,6 @@ module "vxlan_sink" {
 | vpc_id | VPC ID to deploy into | `string` | n/a | **yes** |
 | subnet_id | Subnet ID for the instance | `string` | n/a | **yes** |
 | key_name | SSH key pair name | `string` | `null` | no |
-| vxlan_source_cidrs | CIDRs allowed VXLAN traffic (UDP 4789) | `list(string)` | n/a | **yes** |
 | ssh_source_cidrs | CIDRs allowed SSH access (empty = disabled) | `list(string)` | `[]` | no |
 | iam_instance_profile | IAM instance profile name | `string` | `null` | no |
 | name | Name prefix for resources | `string` | `"vxlan-sink"` | no |

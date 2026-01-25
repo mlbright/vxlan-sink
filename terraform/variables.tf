@@ -32,11 +32,6 @@ variable "key_name" {
   default     = null
 }
 
-variable "vxlan_source_cidrs" {
-  description = "List of CIDR blocks allowed to send VXLAN traffic (UDP 4789) to this instance."
-  type        = list(string)
-}
-
 variable "ssh_source_cidrs" {
   description = "List of CIDR blocks allowed SSH access (TCP 22). Empty list disables SSH access."
   type        = list(string)

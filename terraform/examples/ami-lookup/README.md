@@ -14,7 +14,6 @@ module "vxlan_sink" {
   ami_name_prefix    = "vxlan-graviton"
   vpc_id             = "vpc-xxx"
   subnet_id          = "subnet-xxx"
-  vxlan_source_cidrs = ["10.0.0.0/8"]
 
   # Optional: Enable SSH access
   # ssh_source_cidrs = ["10.0.0.0/8"]

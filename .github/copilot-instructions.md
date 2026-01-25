@@ -53,7 +53,7 @@ Always use `t4g.*` (Graviton/ARM64). Default is `t4g.nano` for cost optimization
 ### Terraform Module Patterns
 - `ami_id = null` triggers automatic AMI lookup by `ami_name_prefix`
 - `ssh_source_cidrs = []` (default) disables SSH access entirely
-- Required inputs: `vpc_id`, `subnet_id`, `vxlan_source_cidrs`
+- Required inputs: `vpc_id`, `subnet_id`
 
 ### File Naming
 - Packer: `ami/graviton-vxlan-ami.pkr.hcl`

@@ -2,19 +2,19 @@
 
 This repository provides two key capabilities:
 
-1. **AMI Building** — Packer configuration to build a pre-configured VXLAN receiver AMI
+1. **AMI Building** — Packer configuration to build a pre-configured VXLAN sink/receiver AMI
 2. **Terraform Module** — Deploy the VXLAN sink into any existing AWS VPC
 
 ### What do you mean by a VXLAN Sink?
 
-A virtual machine configured to receive VXLAN-encapsulated traffic. VXLAN (Virtual Extensible LAN) is an overlay network protocol that encapsulates Layer 2 Ethernet frames within UDP packets, enabling network virtualization across Layer 3 boundaries.
+A virtual machine configured to receive VXLAN-encapsulated traffic.
+VXLAN (Virtual Extensible LAN) is an overlay network protocol that encapsulates Layer 2 Ethernet frames within UDP packets, enabling network virtualization across Layer 3 boundaries.
 
 This implementation creates a `vxlan0` interface that:
+
 - Listens on UDP port 4789 (standard VXLAN port)
 - Uses VXLAN ID 1337
 - Starts automatically on boot via systemd
-
-### Why Graviton?
 
 The AMI is built for AWS Graviton (ARM64) processors, specifically using `t4g.nano` instances—the cheapest EC2 instance type available—making this ideal for cost-sensitive network infrastructure.
 
@@ -55,9 +55,9 @@ vxlan-sink/
 
 ## Quick Start
 
-### Option 1: Use Pre-built AMI with Terraform
+### Deployment with Terraform
 
-If AMIs are already published (check [Releases](../../releases)), deploy directly:
+Note: If AMIs are not yet published, see "Building the AMI" section below.
 
 ```hcl
 module "vxlan_sink" {
@@ -65,26 +65,11 @@ module "vxlan_sink" {
 
   vpc_id             = "vpc-0123456789abcdef0"
   subnet_id          = "subnet-0123456789abcdef0"
-  vxlan_source_cidrs = ["10.0.0.0/8"]
 }
 
 output "vxlan_endpoint" {
   value = module.vxlan_sink.vxlan_endpoint
 }
-```
-
-### Option 2: Build Your Own AMI
-
-```bash
-# Clone the repository
-git clone https://github.com/mlbright/vxlan-sink.git
-cd vxlan-sink
-
-# Initialize and build
-make init
-make build
-
-# The AMI ID will be in manifest.json
 ```
 
 ---
@@ -173,7 +158,6 @@ module "vxlan_sink" {
 
   vpc_id             = "vpc-0123456789abcdef0"
   subnet_id          = "subnet-0123456789abcdef0"
-  vxlan_source_cidrs = ["10.0.0.0/8"]
 }
 ```
 
@@ -186,7 +170,6 @@ module "vxlan_sink" {
   ami_id             = "ami-0123456789abcdef0"
   vpc_id             = "vpc-0123456789abcdef0"
   subnet_id          = "subnet-0123456789abcdef0"
-  vxlan_source_cidrs = ["10.0.0.0/8"]
 }
 ```
 
@@ -198,7 +181,6 @@ module "vxlan_sink" {
 
   vpc_id             = "vpc-0123456789abcdef0"
   subnet_id          = "subnet-0123456789abcdef0"
-  vxlan_source_cidrs = ["10.0.0.0/8"]
 
   # Enable SSH (disabled by default)
   ssh_source_cidrs   = ["10.0.0.0/8"]
@@ -216,7 +198,6 @@ module "vxlan_sink" {
 | `vpc_id` | string | — | **Yes** | VPC ID to deploy into |
 | `subnet_id` | string | — | **Yes** | Subnet ID for the instance |
 | `key_name` | string | `null` | No | SSH key pair name |
-| `vxlan_source_cidrs` | list(string) | — | **Yes** | CIDRs allowed VXLAN traffic (UDP 4789) |
 | `ssh_source_cidrs` | list(string) | `[]` | No | CIDRs allowed SSH access (empty = disabled) |
 | `iam_instance_profile` | string | `null` | No | IAM instance profile name |
 | `name` | string | `"vxlan-sink"` | No | Name prefix for resources |

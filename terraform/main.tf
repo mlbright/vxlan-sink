@@ -49,7 +49,6 @@ resource "aws_security_group_rule" "vxlan_ingress" {
   from_port         = 4789
   to_port           = 4789
   protocol          = "udp"
-  cidr_blocks       = var.vxlan_source_cidrs
   security_group_id = aws_security_group.vxlan_sink.id
   description       = "Allow VXLAN traffic from specified CIDRs"
 }

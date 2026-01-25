@@ -2,7 +2,6 @@ aws_region         = "us-east-1"
 ami_id             = "ami-0123456789abcdef0"
 vpc_id             = "vpc-xxx"
 subnet_id          = "subnet-xxx"
-vxlan_source_cidrs = ["10.0.0.0/8"]
 
 # Optional: Enable SSH access
 # ssh_source_cidrs = ["10.0.0.0/8"]

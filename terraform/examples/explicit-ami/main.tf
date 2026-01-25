@@ -34,11 +34,6 @@ variable "subnet_id" {
   type        = string
 }
 
-variable "vxlan_source_cidrs" {
-  description = "List of CIDR blocks allowed to send VXLAN traffic"
-  type        = list(string)
-}
-
 variable "ssh_source_cidrs" {
   description = "List of CIDR blocks allowed SSH access"
   type        = list(string)
@@ -57,7 +52,6 @@ module "vxlan_sink" {
   ami_id             = var.ami_id
   vpc_id             = var.vpc_id
   subnet_id          = var.subnet_id
-  vxlan_source_cidrs = var.vxlan_source_cidrs
   ssh_source_cidrs   = var.ssh_source_cidrs
   key_name           = var.key_name
 
