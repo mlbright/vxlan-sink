@@ -1,29 +1,4 @@
-# Look up the latest VXLAN sink AMI when ami_id is not explicitly provided
-data "aws_ami" "vxlan" {
-  count = var.ami_id == null ? 1 : 0
-
-  most_recent = true
-  owners      = ["self"]
-
-  filter {
-    name   = "name"
-    values = ["${var.ami_name_prefix}-*"]
-  }
-
-  filter {
-    name   = "architecture"
-    values = ["arm64"]
-  }
-
-  filter {
-    name   = "state"
-    values = ["available"]
-  }
-}
-
 locals {
-  ami_id = coalesce(var.ami_id, try(data.aws_ami.vxlan[0].id, null))
-
   common_tags = merge(
     {
       Name      = var.name
@@ -36,7 +11,7 @@ locals {
 
 # Security group for VXLAN sink instance
 resource "aws_security_group" "vxlan_sink" {
-  name        = "${var.name}-sg"
+  name        = var.name
   description = "Security group for VXLAN sink instance"
   vpc_id      = var.vpc_id
 
@@ -79,7 +54,7 @@ resource "aws_security_group_rule" "egress" {
 
 # VXLAN sink EC2 instance
 resource "aws_instance" "vxlan_sink" {
-  ami                         = local.ami_id
+  ami                         = var.ami_id
   instance_type               = var.instance_type
   subnet_id                   = var.subnet_id
   vpc_security_group_ids      = [aws_security_group.vxlan_sink.id]
@@ -88,11 +63,4 @@ resource "aws_instance" "vxlan_sink" {
   associate_public_ip_address = false
 
   tags = local.common_tags
-
-  lifecycle {
-    precondition {
-      condition     = local.ami_id != null
-      error_message = "AMI ID could not be determined. Either provide ami_id or ensure an AMI matching ami_name_prefix exists."
-    }
-  }
 }

@@ -14,8 +14,8 @@ output "security_group_id" {
 }
 
 output "ami_id" {
-  description = "AMI ID used for the VXLAN sink instance (resolved from explicit or lookup)"
-  value       = local.ami_id
+  description = "AMI ID used for the VXLAN sink instance"
+  value       = var.ami_id
 }
 
 output "vxlan_endpoint" {

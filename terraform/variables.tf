@@ -1,13 +1,6 @@
 variable "ami_id" {
-  description = "Explicit AMI ID for the VXLAN sink instance. If null, the module will look up the latest AMI matching ami_name_prefix."
+  description = "AMI ID for the VXLAN sink instance."
   type        = string
-  default     = null
-}
-
-variable "ami_name_prefix" {
-  description = "AMI name prefix used for automatic AMI lookup when ami_id is not specified."
-  type        = string
-  default     = "vxlan-graviton"
 }
 
 variable "instance_type" {
