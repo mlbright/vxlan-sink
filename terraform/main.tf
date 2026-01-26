@@ -24,6 +24,7 @@ resource "aws_security_group_rule" "vxlan_ingress" {
   from_port         = 4789
   to_port           = 4789
   protocol          = "udp"
+  cidr_blocks       = ["10.0.0.0/8"]
   security_group_id = aws_security_group.vxlan_sink.id
   description       = "Allow VXLAN traffic from specified CIDRs"
 }
@@ -36,7 +37,7 @@ resource "aws_security_group_rule" "ssh_ingress" {
   from_port         = 22
   to_port           = 22
   protocol          = "tcp"
-  cidr_blocks       = var.ssh_source_cidrs
+  cidr_blocks       = ["10.0.0.0/8"]
   security_group_id = aws_security_group.vxlan_sink.id
   description       = "Allow SSH from specified CIDRs"
 }
