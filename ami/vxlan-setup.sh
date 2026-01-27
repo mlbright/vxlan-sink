@@ -54,7 +54,7 @@ ip link set ${VXLAN_INTERFACE} up
 echo ""
 echo "VXLAN configuration complete!"
 echo "================================"
-ip -d link show ${VXLAN_INTERFACE}
+ip link show ${VXLAN_INTERFACE}
 echo ""
 ip addr show ${VXLAN_INTERFACE}
 echo ""
