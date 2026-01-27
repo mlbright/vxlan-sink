@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Dry run (don\'t actually delete)'
+        description: 'Dry run (don''t actually delete)'
         required: false
         type: boolean
         default: true
