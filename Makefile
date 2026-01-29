@@ -9,6 +9,7 @@ help:
 	@echo "  make init       - Initialize Packer plugins"
 	@echo "  make validate   - Validate Packer configuration"
 	@echo "  make build      - Build the AMI (uses t4g.nano by default)"
+	@echo "  make build-nano - Build with t4g.nano instance"
 	@echo "  make build-micro - Build with t4g.micro instance"
 	@echo "  make build-small - Build with t4g.small instance"
 	@echo "  make fmt        - Format Packer HCL files"
@@ -41,6 +42,11 @@ fmt:
 build: validate
 	@echo "Building AMI with t4g.nano (cheapest Graviton instance)..."
 	packer build ami/graviton-vxlan-ami.pkr.hcl
+
+# Build with t4g.micro
+build-nano: validate
+	@echo "Building AMI with t4g.nano..."
+	packer build -var="instance_type=t4g.nano" ami/graviton-vxlan-ami.pkr.hcl
 
 # Build with t4g.micro
 build-micro: validate
