@@ -1,11 +1,11 @@
-.PHONY: help init validate build clean install-vxlan
+.PHONY: help init validate build clean install-vxlan azure-setup azure-init azure-validate azure-build
 
 # Default target
 help:
 	@echo "VXLAN sink AMI Builder"
 	@echo "============================="
 	@echo ""
-	@echo "Packer Commands:"
+	@echo "AWS Packer Commands:"
 	@echo "  make init       - Initialize Packer plugins"
 	@echo "  make validate   - Validate Packer configuration"
 	@echo "  make build      - Build the AMI (uses t4g.nano by default)"
@@ -13,6 +13,12 @@ help:
 	@echo "  make build-micro - Build with t4g.micro instance"
 	@echo "  make build-small - Build with t4g.small instance"
 	@echo "  make fmt        - Format Packer HCL files"
+	@echo ""
+	@echo "Azure Packer Commands:"
+	@echo "  make azure-setup    - Create Azure resource group, gallery, and image definition"
+	@echo "  make azure-init     - Initialize Azure Packer plugins"
+	@echo "  make azure-validate - Validate Azure Packer configuration"
+	@echo "  make azure-build    - Build the Azure image (setup + init + validate + build)"
 	@echo ""
 	@echo "VXLAN Commands:"
 	@echo "  make install-vxlan - Install VXLAN systemd service (requires sudo)"
@@ -117,3 +123,53 @@ show-ami:
 	else \
 		echo "No manifest.json found. Build an AMI first with 'make build'"; \
 	fi
+
+# =============================================================================
+# Azure Targets
+# =============================================================================
+
+AZURE_RESOURCE_GROUP ?= vxlan-sink-images
+AZURE_LOCATION ?= eastus2
+AZURE_GALLERY ?= dev_builds
+AZURE_IMAGE_DEF ?= vxlan-sink
+
+# Create Azure resource group, compute gallery, and image definition
+azure-setup:
+	@echo "Creating Azure resources for image build..."
+	az group create \
+		--name $(AZURE_RESOURCE_GROUP) \
+		--location $(AZURE_LOCATION) \
+		--output table
+	@echo "Creating compute gallery '$(AZURE_GALLERY)'..."
+	az sig create \
+		--resource-group $(AZURE_RESOURCE_GROUP) \
+		--gallery-name $(AZURE_GALLERY) \
+		--location $(AZURE_LOCATION) \
+		--output table 2>/dev/null || echo "Gallery '$(AZURE_GALLERY)' already exists"
+	@echo "Creating image definition '$(AZURE_IMAGE_DEF)'..."
+	az sig image-definition create \
+		--resource-group $(AZURE_RESOURCE_GROUP) \
+		--gallery-name $(AZURE_GALLERY) \
+		--gallery-image-definition $(AZURE_IMAGE_DEF) \
+		--publisher cpacket \
+		--offer vxlan-sink \
+		--sku ubuntu-2404-lts \
+		--os-type Linux \
+		--os-state Generalized \
+		--hyper-v-generation V2 \
+		--output table 2>/dev/null || echo "Image definition '$(AZURE_IMAGE_DEF)' already exists"
+
+# Initialize Azure Packer plugins
+azure-init:
+	@echo "Initializing Azure Packer plugins..."
+	packer init azure-vxlan-image.pkr.hcl
+
+# Validate Azure Packer configuration
+azure-validate: azure-init
+	@echo "Validating Azure Packer configuration..."
+	packer validate azure-vxlan-image.pkr.hcl
+
+# Build Azure image (full pipeline: setup + validate + build)
+azure-build: azure-setup azure-validate
+	@echo "Building Azure image..."
+	packer build azure-vxlan-image.pkr.hcl
