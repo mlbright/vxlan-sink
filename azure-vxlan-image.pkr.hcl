@@ -20,12 +20,12 @@ variable "vm_size" {
 
 variable "resource_group" {
   type    = string
-  default = "vxlan-sink-images"
+  default = "cloud-builds-support"
 }
 
 variable "gallery_name" {
   type    = string
-  default = "dev_builds"
+  default = "dev_builds_support"
 }
 
 variable "image_name" {
@@ -57,11 +57,11 @@ source "azure-arm" "vxlan" {
 
   # Publish to Azure Compute Gallery
   shared_image_gallery_destination {
-    resource_group = var.resource_group
-    gallery_name   = var.gallery_name
-    image_name     = var.image_name
-    image_version  = local.image_version
-    replication_regions = [var.location]
+    resource_group      = var.resource_group
+    gallery_name        = var.gallery_name
+    image_name          = var.image_name
+    image_version       = local.image_version
+    replication_regions = [var.location, "canadacentral"]
   }
 
   # Tags applied to build resources

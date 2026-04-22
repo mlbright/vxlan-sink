@@ -164,9 +164,9 @@ show-ami:
 # Azure Targets
 # =============================================================================
 
-AZURE_RESOURCE_GROUP ?= vxlan-sink-images
+AZURE_RESOURCE_GROUP ?= cloud-builds-support
 AZURE_LOCATION ?= eastus2
-AZURE_GALLERY ?= dev_builds
+AZURE_GALLERY ?= dev_builds_support
 AZURE_IMAGE_DEF ?= vxlan-sink
 
 # Create Azure resource group, compute gallery, and image definition
