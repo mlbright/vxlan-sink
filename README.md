@@ -134,139 +134,151 @@ packer build \
 Edit `ami/vxlan-setup.sh` before building:
 
 ```bash
-VXLAN_ID="1337"           # Your VXLAN ID
-VXLAN_PORT="4789"         # Your port
+# Create a pull request
+git checkout -b feature/my-changes
+git push origin feature/my-changes
+# Open PR on GitHub
 ```
 
----
+This will:
+1. ✅ Validate Packer configuration
+2. ✅ Format check
+3. ❌ No AMI build (saves costs)
 
-## Using the Terraform Module
+### Manual Build
 
-The Terraform module deploys a VXLAN sink instance into an existing VPC.
+1. Go to **Actions** tab
+2. Select **Build and Publish Graviton VXLAN AMI**
+3. Click **Run workflow**
+4. Configure:
+   - Branch: `main`
+   - Regions: `us-east-1,eu-central-1` (or leave default)
+   - Make Public: ✓ (optional)
+5. Click **Run workflow**
 
-### Module Source
+## Workflow Jobs Explained
 
-```hcl
-source = "github.com/mlbright/vxlan-sink//terraform"
+### Job: `validate`
+
+**Runs on**: All pushes and PRs
+
+```yaml
+Steps:
+1. Checkout code
+2. Setup Packer
+3. Initialize Packer plugins
+4. Validate configuration
+5. Check formatting
 ```
 
-### Basic Usage (Automatic AMI Lookup)
+**Purpose**: Catch configuration errors early without incurring AMI build costs.
 
-```hcl
-module "vxlan_sink" {
-  source = "github.com/mlbright/vxlan-sink//terraform"
+### Job: `build-ami`
 
-  vpc_id             = "vpc-0123456789abcdef0"
-  subnet_id          = "subnet-0123456789abcdef0"
-}
+**Runs on**: Pushes to main/release branches, tags, manual dispatch
+
+**Matrix Strategy**: Builds in parallel across regions
+- `us-east-1` - US East (N. Virginia)
+- `us-west-2` - US West (Oregon)  
+- `eu-west-1` - EU (Ireland)
+
+```yaml
+Steps:
+1. Checkout code
+2. Setup Packer
+3. Assume AWS role via OIDC
+4. Verify AWS credentials
+5. Build AMI with Packer
+6. Tag AMI with metadata
+7. Make AMI public (if tag/manual)
+8. Upload manifest artifact
+9. Generate summary
 ```
 
-### With Explicit AMI ID
+**Output**: AMI ID per region, saved in artifacts
 
-```hcl
-module "vxlan_sink" {
-  source = "github.com/mlbright/vxlan-sink//terraform"
+### Job: `create-release`
 
-  ami_id             = "ami-0123456789abcdef0"
-  vpc_id             = "vpc-0123456789abcdef0"
-  subnet_id          = "subnet-0123456789abcdef0"
-}
+**Runs on**: Tag pushes (`v*`) only
+
+```yaml
+Steps:
+1. Download all manifests
+2. Generate release notes with AMI IDs
+3. Create GitHub release
+4. Attach manifest files
 ```
 
-### With SSH Access Enabled
+**Output**: GitHub release with:
+- AMI IDs for all regions
+- Launch instructions
+- Feature list
+- Manifest JSON files
 
-```hcl
-module "vxlan_sink" {
-  source = "github.com/mlbright/vxlan-sink//terraform"
+## GitHub Release Format
 
-  vpc_id             = "vpc-0123456789abcdef0"
-  subnet_id          = "subnet-0123456789abcdef0"
+When you push a tag, the workflow creates a release like this:
 
-  # Enable SSH (disabled by default)
-  ssh_source_cidrs   = ["10.0.0.0/8"]
-  key_name           = "my-key-pair"
-}
+```markdown
+# Graviton VXLAN AMI Release v1.0.0
+
+## AMI IDs by Region
+
+- **us-east-1**: `ami-0123456789abcdef0`
+- **us-west-2**: `ami-0fedcba9876543210`
+- **eu-west-1**: `ami-0a1b2c3d4e5f67890`
+
+## Launch Instance
+
+```bash
+aws ec2 run-instances \
+  --image-id <AMI_ID_FROM_ABOVE> \
+  --instance-type t4g.nano \
+  --key-name YOUR_KEY_PAIR \
+  --security-group-ids YOUR_SECURITY_GROUP \
+  --subnet-id YOUR_SUBNET
 ```
 
-### Module Inputs
+## Features
+- VXLAN interface pre-configured (vxlan0) in external/collect-metadata mode (accepts ALL VNIs)
+- Linux bridge (br0) receives decapsulated inner frames via a tc flower ingress redirect
+- Systemd service for automatic startup
+- UDP port 4789 open for VXLAN traffic
+- Capture decapsulated traffic with `tcpdump -i br0`; capture encapsulated traffic with `tcpdump -i <eth> 'udp port 4789'`
+...
+```
 
-| Variable | Type | Default | Required | Description |
-|----------|------|---------|:--------:|-------------|
-| `ami_id` | string | `null` | No | Explicit AMI ID (if null, uses lookup) |
-| `ami_name_prefix` | string | `"vxlan-graviton"` | No | AMI name prefix for automatic lookup |
-| `instance_type` | string | `"t4g.nano"` | No | EC2 instance type (ARM64/Graviton) |
-| `vpc_id` | string | — | **Yes** | VPC ID to deploy into |
-| `subnet_id` | string | — | **Yes** | Subnet ID for the instance |
-| `key_name` | string | `null` | No | SSH key pair name |
-| `ssh_source_cidrs` | list(string) | `[]` | No | CIDRs allowed SSH access (empty = disabled) |
-| `iam_instance_profile` | string | `null` | No | IAM instance profile name |
-| `name` | string | `"vxlan-sink"` | No | Name prefix for resources |
-| `tags` | map(string) | `{}` | No | Additional tags for resources |
+## Customizing Regions
 
-### Module Outputs
+### Change Default Regions
 
-| Output | Description |
-|--------|-------------|
-| `instance_id` | EC2 instance ID |
-| `private_ip` | Private IP address |
-| `security_group_id` | Security group ID |
-| `ami_id` | Resolved AMI ID (from explicit or lookup) |
-| `vxlan_endpoint` | VXLAN endpoint (`private_ip:4789`) |
+Edit `.github/workflows/build-ami.yml`:
 
-### Examples
+```yaml
+strategy:
+  matrix:
+    region: 
+      - us-east-1
+      - ap-south-1      # Add Mumbai
+      - eu-central-1    # Add Frankfurt
+```
 
-See [terraform/examples/](terraform/examples/) for complete working examples:
+### Build in Single Region
 
-- [explicit-ami](terraform/examples/explicit-ami/) — Deploy with a known AMI ID
-- [ami-lookup](terraform/examples/ami-lookup/) — Deploy with automatic AMI discovery
+For testing/cost savings, temporarily edit to single region:
 
----
+```yaml
+strategy:
+  matrix:
+    region: 
+      - us-east-1  # Only build here
+```
 
-## CI/CD with GitHub Actions
+Or use **workflow_dispatch** to specify regions manually.
 
-The repository includes automated workflows for building and publishing AMIs.
+## AMI Naming Convention
 
-### Features
-
-- ✅ **OIDC Authentication** — No long-lived AWS credentials
-- ✅ **Multi-Region** — Build AMIs in US East, US West, and EU West simultaneously
-- ✅ **Automatic Publishing** — Make AMIs public on tagged releases
-- ✅ **Validation** — Packer validation on all PRs
-- ✅ **GitHub Releases** — Automatic release creation with AMI IDs
-
-### Workflow Triggers
-
-| Trigger | When | What Happens |
-|---------|------|--------------|
-| Push to `main` | Code merged | Builds dev AMIs (private) |
-| Push tag `v*` | Release tag created | Builds public AMIs, creates GitHub release |
-| Pull Request | PR opened/updated | Validates Packer config only |
-| Manual | workflow_dispatch | Configurable regions and visibility |
-
-### Setting Up CI/CD
-
-1. **Configure AWS OIDC**
-
-   ```bash
-   cd github-oidc/
-   cp terraform.tfvars.example terraform.tfvars
-   # Edit terraform.tfvars with your GitHub org/repo
-   terraform init
-   terraform apply
-   ```
-
-2. **Add GitHub Secret**
-
-   Copy the IAM role ARN from Terraform output and add it as `AWS_ROLE_ARN` secret in your repository settings.
-
-3. **Create a Release**
-
-   ```bash
-   git tag -a v1.0.0 -m "Release v1.0.0"
-   git push origin v1.0.0
-   ```
-
-### AMI Naming Convention
+AMIs are named using this pattern:
 
 ```
 vxlan-graviton-{VERSION}
