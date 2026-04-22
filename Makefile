@@ -1,4 +1,4 @@
-.PHONY: help init validate build clean install-vxlan azure-setup azure-init azure-validate azure-build
+.PHONY: help init validate build clean clean-builders install-vxlan azure-setup azure-init azure-validate azure-build
 
 # Default target
 help:
@@ -25,8 +25,9 @@ help:
 	@echo "  make test-vxlan    - Test VXLAN setup without systemd"
 	@echo ""
 	@echo "Utility Commands:"
-	@echo "  make clean      - Remove build artifacts"
-	@echo "  make setup      - Set executable permissions on scripts"
+	@echo "  make clean          - Remove build artifacts"
+	@echo "  make clean-builders - Terminate orphan Packer EC2 instances + delete temp keypairs/SGs"
+	@echo "  make setup          - Set executable permissions on scripts"
 
 # Initialize Packer
 init:
@@ -108,6 +109,41 @@ clean:
 	rm -f packer-manifest.json
 	rm -f crash.log
 	rm -rf packer_cache/
+
+# Clean up any leftover Packer builder resources in AWS (instances, keypairs, SGs).
+# Useful when a build was interrupted (Ctrl+C, killed terminal) and Packer's
+# automatic cleanup did not run. Filters on the run_tags applied by the Packer
+# build (Purpose=AMI Build) and the packer_* naming convention for keypairs/SGs.
+AWS_REGION ?= us-east-1
+clean-builders:
+	@echo "Cleaning up orphan Packer resources in $(AWS_REGION)..."
+	@INSTANCES=$$(aws ec2 describe-instances --region $(AWS_REGION) \
+	  --filters 'Name=tag:Purpose,Values=AMI Build' \
+	            'Name=instance-state-name,Values=pending,running,stopping,stopped' \
+	  --query 'Reservations[].Instances[].InstanceId' --output text); \
+	if [ -n "$$INSTANCES" ]; then \
+	  echo "Terminating instances: $$INSTANCES"; \
+	  aws ec2 terminate-instances --region $(AWS_REGION) --instance-ids $$INSTANCES >/dev/null; \
+	  echo "Waiting for instances to terminate..."; \
+	  aws ec2 wait instance-terminated --region $(AWS_REGION) --instance-ids $$INSTANCES; \
+	else \
+	  echo "No orphan builder instances found."; \
+	fi
+	@SGS=$$(aws ec2 describe-security-groups --region $(AWS_REGION) \
+	  --filters 'Name=group-name,Values=packer_*' \
+	  --query 'SecurityGroups[].GroupId' --output text); \
+	for sg in $$SGS; do \
+	  echo "Deleting security group $$sg"; \
+	  aws ec2 delete-security-group --region $(AWS_REGION) --group-id $$sg || true; \
+	done
+	@KPS=$$(aws ec2 describe-key-pairs --region $(AWS_REGION) \
+	  --filters 'Name=key-name,Values=packer_*' \
+	  --query 'KeyPairs[].KeyName' --output text); \
+	for kp in $$KPS; do \
+	  echo "Deleting key pair $$kp"; \
+	  aws ec2 delete-key-pair --region $(AWS_REGION) --key-name $$kp || true; \
+	done
+	@echo "Cleanup complete."
 
 # Check AWS credentials
 check-aws:
