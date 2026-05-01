@@ -107,17 +107,17 @@ build {
 
   # Copy VXLAN scripts
   provisioner "file" {
-    source      = "vxlan-setup.sh"
+    source      = "ami/vxlan-setup.sh"
     destination = "/tmp/vxlan-setup.sh"
   }
 
   provisioner "file" {
-    source      = "vxlan-teardown.sh"
+    source      = "ami/vxlan-teardown.sh"
     destination = "/tmp/vxlan-teardown.sh"
   }
 
   provisioner "file" {
-    source      = "vxlan.service"
+    source      = "ami/vxlan.service"
     destination = "/tmp/vxlan.service"
   }
 
